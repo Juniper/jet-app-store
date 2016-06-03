@@ -1,0 +1,58 @@
+---
+#Common credentials
+CLIENT_ID : '110'
+S_CLIENT_ID : '220'
+PORT : 9090
+USER : 'user1'
+PASSWORD : 'password1'
+poll_interval : 10
+
+# SNMP SERVER Database
+NOC_SERVER : "192.168.1.1"
+SNMP_PORT : 162
+COMMUNITY : "public"
+
+#Router1 Database
+R1_IP : "PE-ROUTER1"
+R1_IF_S1 :  "ge-0/0/3"
+R1_IF_S2 :  "ge-0/0/1"
+R1_IF_S3 :  "ge-0/0/2"
+R1_IF_S4 :  "ge-0/0/0"
+
+#Router2 Database
+R2_IP : "PE-ROUTE2"
+R2_IF_S1 :  "ge-0/0/1"
+R2_IF_S2 :  "ge-0/0/0"
+R2_IF_S3 :  "ge-0/0/2"
+R2_IF_S4 :  "ge-0/0/3"
+
+#no of sites
+n : 4
+
+#Site1 Database
+S1_IP : "1.1.1.1"
+S1_Tier : 1
+CIR_S1 : 158.76
+TYPE_S1 : None
+MODCOD_S1 : None
+
+#Site2 Database
+S2_IP : "2.2.2.2"
+S2_Tier : 2
+CIR_S2 : 177.96
+TYPE_S2 : None
+MODCOD_S2 : None
+
+#Site3 Database
+S3_IP : "3.3.3.3"
+S3_Tier : 1
+CIR_S3 : 29.64
+TYPE_S3 : None
+MODCOD_S3 : None
+
+#Site1 Database
+S4_IP : "4.4.4.4"
+S4_Tier : 2
+CIR_S4 : 53.37
+TYPE_S4 : None
+MODCOD_S4 : None
