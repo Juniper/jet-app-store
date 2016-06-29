@@ -1,65 +1,134 @@
-Introduction
+App Description:
+================
 
-JET application "ProgrammableRR.py" listens to the JSON requests from the Provisioning Server and programs the routes in the RR.
+"ProgrammableRR.py" is an on-box JET App that uses the BGP APIs to program routes in the Route Reflector. Route Operations supported by this App are Route Addition, Modification, Deletion and Get (route query). Route operation requests are sent to this App in JSON format from the client scripts which can reside in any server. BGP routes added by this App through the BGP APIs will be installed as protocol type "BGP-Static".
 
+
+1.) App creates a TCP socket, binds it to a port 8888 and starts to listen for the incoming connection on the socket to receive route operation requests from the client scripts. 
+
+2.) Client scripts establishes a TCP socket connection to the port 8888 opened by the on-box app and sends route operation requests (Route Addition/Modification/Deletion/GET) in the JSON format.
+
+3.) On-Box App receives JSON request, determines the route operation from the "action" keyword in the JSON to be either add/modify/delete/query operation and then calls the appropriate BGP APIs to perform the tasks.
+
+4.) In the case of Route GET operation, client script sends JSON request to query all the programmed routes. On-Box App encodes the obtained route information from BGP in the JSON format and sends to the client script.
+
+
+Client scripts used for this App are:
+
+RouteAdd-Client.py
+RouteModify-Client.py
+RouteDelete-Client.py
+RouteGet-Client.py
 
 
 Topology:
+==========
+                                  [BGP RR]                 [RR Client]
 
+Client Script  --------------->      R0      ------------>    R1
 
-PS ------------> R0 -----------R1
-
-
+                               (On-Box JET APP)
+                                
 
 How to run App from On-box:
+===========================
 
-1. Copy App into R0 /var/db/scripts/jet/ProgrammableRR.py
-2. Configure above as jet script. Daemonize knob will run the App in background as daemon.
+
+1. Edit the JET App "ProgrammableRR.py" to fill the following fields in it. HOST is preferabbly the management (fxp0) address or Loopback address of RR.
+USER/PASSWORD are the login credentials of the RR.
+
+#Variables for THRIFT/MQTT connection
+HOST = 'IP of Router'
+USER = 'lab'
+PASSWORD = 'lab'
+
+
+2. Copy JET App "ProgrammableRR.py" to the RR (R0 router) at the following location:
+    
+    /var/db/scripts/jet/
+
+
+3. Enable JET in R0:
+
+    set system scripts language python
+    set system services extension-service request-response thrift clear-text
+    set system services extension-service request-response thrift max-connections 4
+    set system services extension-service notification allow-clients address 0.0.0.0/0
+    set interfaces lo0 unit 0 family inet address 127.0.0.1/32
+
+
+4. Configure the App as JET file. The optional 'Daemonize' knob will run the App in background as daemon immediately after this config is committed.
+    
     set system scripts jet file ProgrammableRR.py daemonize
-3. Enable Jet in R0
-    set system services extension-service thrift request-response clear-text address <router management IP/Name>
-    set system services extension-service thrift request-response max-connection 8
-    set system services extension-service notification-server address <router management IP/Name>
 
-How to run App from off-box:
 
-1. Copy App into off-box
-2. Run app from Off-box
-    python ProgrammableRR.py
+5. Alternately App can be started/stoped as below if the 'daemonize' knob is not used.
     
-    
-Sample Output of programmed route:
+    request extension-service start ProgrammableRR.py    
+    request extension-service stop ProgrammableRR.py    
 
-Router> show route 101.1.1.1/32 extensive 
 
-inet.0: 2068 destinations, 2068 routes (2068 active, 0 holddown, 0 hidden)
-Restart Complete
-101.1.1.1/32 (1 entry, 1 announced)
-        State: <FlashAll>
-        *BGP-Static Preference: 5/-101
-                Next hop type: Indirect, Next hop index: 0
-                Address: 0x6615150
-                Next-hop reference count: 1
-                Protocol next hop: 1001:1:1:1::1
-                Indirect next hop: 0x2 no-forward INH Session ID: 0x0
-                State: <Active Int Ext AlwaysFlash NSR-incapable Programmed>
-                Age: 7:28:51 	Metric2: 0 
-                Validation State: unverified 
-                Announcement bits (2): 4-LDP 6-Resolve tree 2 
-                AS path: I
-                Communities: encapsulation:v4ov6(14)
-                Indirect next hops: 1
-                        Protocol next hop: 1001:1:1:1::1
-                        Indirect next hop: 0x2 no-forward INH Session ID: 0x0
-                        Indirect path forwarding next hops: 1
-                                Next hop type: Router
-                                Next hop: 2001:30:30:30:1::1 via xe-2/0/1.0
-                                Session Id: 0x0
-			::/0 Originating RIB: inet6.0
-			  Node path count: 1
-			  Forwarding nexthops: 1
-				Nexthop: 2001:30:30:30:1::1 via xe-2/0/1.0
 
-Router> 
+
+
+Sample Output of Route Operation by the App:
+=============================================
+
+
+## Start the App on the RR (R0 Router)
+
+Router> request extension-service start ProgrammableRR.py    
+Extension-service application 'ProgrammableRR.py' started with PID: 12946
+
+
+
+#### Start Route Operation through Client Scripts  ####
+
+-bash-4.2# uname -a
+Linux nms5-vm-linux2 3.11.10-100.fc18.x86_64 #1 SMP Mon Dec 2 20:28:38 UTC 2013 x86_64 x86_64 x86_64 GNU/Linux
+-bash-4.2# 
+
+
+## Route Add operation
+-bash-4.2# python RouteAdd-Client.py
+Preparing Route Information JSON Object
+[{'ipv4address': '80.10.1.15/32', 'action': 'add', 'next_hop': '20.10.1.1', 'community': '100:101'}]
+Route Information Sent on socket, total bytes =  110
+
+[{"returncode": "0"}]
+Closing Socket
+-bash-4.2# 
+
+
+## Route Modify operation: Modifies the Next-Hop of the already installed route.
+-bash-4.2# python RouteModify-Client.py
+Preparing Route Information JSON Object
+[{'ipv4address': '80.10.1.15/32', 'action': 'modify', 'next_hop': '20.10.2.1', 'community': '100:101'}]
+Route Information Sent on socket, total bytes =  113
+
+[{"returncode": "0"}]
+Closing Socket
+-bash-4.2#
+
+
+## Route GET operation: Queries the programmed routes on the box
+-bash-4.2# python RouteGet-Client.py
+Creating Route Information JSON Object
+Route Query Sent to the JET app:  [{'action': 'query', 'prefix': 'all'}]
+[{'ipv4address':'80.10.1.15', 'next_hop':'20.10.2.1', 'community':'100:101' }]
+Total routes received =  1
+Closing Socket
+-bash-4.2# 
+
+
+## Route Delete operation: Deletes the already installed route.
+-bash-4.2# python RouteDelete-Client.py
+Preparing Route Information JSON Object
+[{'ipv4address': '80.10.1.15/32', 'action': 'delete'}]
+Route Information Sent on socket, total bytes =  64
+
+[{"returncode": "0"}]
+Closing Socket
+-bash-4.2# 
 
 

@@ -39,11 +39,11 @@ should be a condition to exit the recv loop in the PS client.
 """
 
 import socket, select
-import os
 from struct import *
 from jnpr.jet.JetHandler import *
-import sys, traceback
-
+import logging
+from logging.handlers import RotatingFileHandler
+import time
 from thrift import Thrift
 from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
@@ -51,20 +51,28 @@ from thrift.protocol import TBinaryProtocol
 from Queue import Queue
 from threading import Thread
 import threading
-import signal
-import time
+
+# Logging Parameters
+DEFAULT_LOG_FILE_NAME = '/tmp/jetapp.log'
+#DEFAULT_LOG_LEVEL = logging.INFO
+DEFAULT_LOG_LEVEL = logging.CRITICAL
+
+# Enable Logging to a file
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)s ] %(message)s"
+logging.basicConfig(filename=DEFAULT_LOG_FILE_NAME, level=DEFAULT_LOG_LEVEL, format = FORMAT)
+handler = RotatingFileHandler(DEFAULT_LOG_FILE_NAME,maxBytes=1024)
+LOG = logging.getLogger(__name__)
+LOG.addHandler(handler)
 
 # Variables for THRIFT/MQTT connection
-HOST = 'IP of RA'
-
+HOST = 'IP of Router'
 PORT = 9090
-CLIENT_ID = "102"
+CLIENT_ID = "100"
 USER = 'lab'
 PASSWORD = 'lab'
 TIMEOUT = 5
 JET_APP_VERSION = '1'
 HEADER_LENGTH = calcsize('!ccll')
-
 
 requestQ = Queue()
 
@@ -87,23 +95,19 @@ def sendtoPS():
     global total_sent_msg
     global getwaitflag
     while True:
-        if not responseQ.empty() and getwaitflag != 1:
             rspMsg = responseQ.get()
             responseQ.task_done()
             # Verify if the entry in the Q is the end of the messages
             # if not then process it
             if (rspMsg == 'END_OF_DATA'):
                 eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
-                getwaitflag = 1
                 try:
                     clrgetsock.sendall(str(eod_data))
-                    #responseQ.queue.clear()
+		    calling_thread_event.set()
                 except socket.error, (value, message):
                     getwaitflag = 1
-                    print 'socket.error in sending eod - ' + message
-		    #os.kill(calling_thread_id, signal.SIGUSR1)
-		    calling_thread_event.set()
-                    #break
+                    LOG.debug('socket.error in sending eod - %s' %str(message))
+                    calling_thread_event.set()
             else:
                 str_res = RoutingBgpRouteGetReply()
                 tbuf = TTransport.TMemoryBuffer(rspMsg)
@@ -113,8 +117,8 @@ def sendtoPS():
                     bgpRouteEntry = str_res.bgp_routes
                     json_data = "["
                     for route in bgpRouteEntry:
-                        print route
-                        json_data += "{'ipv4address':'" + str(route.dest_prefix.RoutePrefixAf.inet.AddrFormat.addr_string) + "', 'ipv6nh':'" + str(
+                        #print route
+                        json_data += "{'ipv4address':'" + str(route.dest_prefix.RoutePrefixAf.inet.AddrFormat.addr_string) + "', 'next_hop':'" + str(
                             route.protocol_nexthops[0].AddrFormat.addr_string) + "', 'community':'" + route.communities.com_list[0].community_string + "' },"
 
                     json_data = json_data[:-1]
@@ -125,34 +129,20 @@ def sendtoPS():
                     try:
                         clrgetsock.sendall(str(data))
                     except socket.error, (value, message):
-                        print 'socket.error in sending data  - ' + message
+                        LOG.debug('socket.error in sending eod - %s' %str(message))
                         getwaitflag = 1
-		        #os.kill(calling_thread_id, signal.SIGUSR1)
                         calling_thread_event.set()
-                        #break
                 else:
                     data = pack('!ccll', JET_APP_VERSION, str(str_res.status), 0, 0)
                     try:
                         clrgetsock.sendall(str(data))
-                        getwaitflag = 1
-                        #break
-                    except socket.error, (value, message):
-                        print 'socket.error - ' + message
-                        getwaitflag = 1
-                        #os.kill(calling_thread_id, signal.SIGUSR1)
 			calling_thread_event.set()
-                        #break
+                        getwaitflag = 1
+                    except socket.error, (value, message):
+                        LOG.debug('socket.error in sending eod - %s' %str(message))
+                        getwaitflag = 1
+                        calling_thread_event.set()
                 total_sent_msg += 1
-        else:
-             if getwaitflag == 1:
-                eod_data = pack('!ccll',JET_APP_VERSION,'1', 0,0)
-                try:
-                    clrgetsock.sendall(str(eod_data))
-                except socket.error, (value, message):
-                    print 'socket.error in sending eod - ' + message
-		finally:
-		    calling_thread_event.set()
-		    #break
 
 def destRoute(destPrefix, family):
     addrForm = IpAddressAddrFormat(destPrefix)
@@ -189,12 +179,11 @@ def destTableId(table):
 
 
 def destProtocol(proto):
-    print 'Protocol:', proto
+    LOG.info('Protocol: %s' %str(proto))
     rpdReq = RoutingRtProtoRegRequest(proto)
     protoReg = prpd.RouteProtoRegister(rpdReq)
     if protoReg.ret_code == 0:
-        print 'Proto Name', protoReg.proto
-        print 'Proto handle', protoReg.handle
+        LOG.info('Proto Name: %s, Proto handle:%s' %(str(protoReg.proto), str(protoReg.handle)))
         return protoReg.proto
     else:
         return 0
@@ -202,7 +191,6 @@ def destProtocol(proto):
 
 def ip_to_uint32(ip):
     t = socket.inet_aton(ip)
-    print struct.unpack("I", t)[0]
     return struct.unpack("I", t)[0]
 
 
@@ -217,13 +205,14 @@ def uint32_to_ip(ipn):
 def handleMessage(message):
     global eod
     if len(message) == 0:
-        print "END OF DATA"
+        LOG.info("END OF DATA")
         eod = 1
         responseQ.put("END_OF_DATA")
     elif eod == 1:
         eod = 0
     else:
         responseQ.put(str(message))
+        time.sleep(2)
 
 
 def AppRouteAdd(clientsocket, routereq):
@@ -232,12 +221,7 @@ def AppRouteAdd(clientsocket, routereq):
         # Intialising BGP
         strBgpReq = RoutingBgpRouteInitializeRequest()
         result = bgp.BgpRouteInitialize(strBgpReq)
-        print 'Invoked BgpRouteInitialize API inside AppRouteAdd.. \nreturn = ', result.status
-
-        #Determine the no of routes in request
-        #lenjson = len(routereq)
-        #print lenjson
-
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteAdd.. \nreturn = %s ' %str(result.status))
         # List for route entries to be passed to API
         routeindex = 0
         routeList = list()
@@ -249,10 +233,10 @@ def AppRouteAdd(clientsocket, routereq):
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
             DEST_PREFIX_LEN = destroutelst[1]
-            DEST6_NEXT_HOP = jsonentry['ipv6nh']
+            DEST6_NEXT_HOP = jsonentry['next_hop']
             AddCommunity = jsonentry['community']
             DEST_ROUTE_TABLE = 'inet.0'
-            print "Route add request received for route:", str(destroute)
+            LOG.info("Route add request received for route:%s" %str(destroute))
 
             # Preparing parameters to call BGP Route Add API
             nhJnxP = IpAddressAddrFormat(DEST6_NEXT_HOP)
@@ -264,41 +248,37 @@ def AppRouteAdd(clientsocket, routereq):
             routeParams.protocol_nexthops = [nextHop]
             routeParams.path_cookie = '10'
             routeParams.protocol = 2
+            #routeParams.route_oper_flag = "4"
             comm = RoutingCommunity(AddCommunity)
             bgpAttrCommunity = RoutingCommunityList([comm])
             routeParams.communities = bgpAttrCommunity
             routeindex = routeindex + 1
             routeList.append(routeParams)
 
-        #print 'Fetched routes from JSON.. \nreturn = ',
-        #print 'Total Routes.. =', routeindex
-
        # Calling BGP Route Add API to program routes
         updReq = RoutingBgpRouteUpdateRequest(routeList)
-        # print updReq
         addRes = bgp.BgpRouteAdd(updReq)
-        print 'Invoked Route Add API Status\nreturn = ', addRes
-        print 'Invoked Route Add API Status\nreturn = ', addRes.status
+        LOG.info('Invoked Route Add API Status\nreturn = %s' %str(addRes))
 
         # API reply captured
         statusval = addRes.status
-        print('addRes.status =', statusval)
+        route_op_count = addRes.operations_completed
 
-        print "Sending reply to PS"
+        LOG.info("Sending reply to PS")
         rtaddjsonreply = [{'returncode': str(statusval)}]
         try:
             clientsocket.send(json.dumps(rtaddjsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
+            LOG.debug("SocketIO: Write failed")
 
     except:
-        print "Sending reply to PS"
+        LOG.info("Sending reply to PS")
         # Return code where there are issues executing Add APIs
         rtaddjsonreply = [{'returncode': '101'}]
         try:
             clientsocket.send(json.dumps(rtaddjsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
+            LOG.debug("SocketIO: Write failed")
 
     return
 
@@ -309,12 +289,11 @@ def AppRouteModify(clrmodsock, routereq):
         # Intialising BGP
         strBgpReq = RoutingBgpRouteInitializeRequest()
         result = bgp.BgpRouteInitialize(strBgpReq)
-        print 'Invoked BgpRouteInitialize API \nreturn = ', result.status
+        LOG.info('Invoked BgpRouteInitialize API \nreturn = %s' %str(result.status))
 
         # List for route entries to be passed to API
         routeindex = 0
         routeList = list()
-
 
         for jsonentry in routereq:
 
@@ -323,9 +302,9 @@ def AppRouteModify(clrmodsock, routereq):
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
             DEST_PREFIX_LEN = destroutelst[1]
-            DEST6_NEXT_HOP = jsonentry['ipv6nh']
+            DEST6_NEXT_HOP = jsonentry['next_hop']
             ModCommunity = jsonentry['community']
-            print "Route Modify request received for route:", str(destroute)
+            LOG.info("Route Modify request received for route: %s" %str(destroute))
 
             # Preparing parameters to call BGP Update API
             DEST_ROUTE_TABLE = 'inet.0'
@@ -338,43 +317,35 @@ def AppRouteModify(clrmodsock, routereq):
             routeParams.protocol_nexthops = [nextHop]
             routeParams.path_cookie = '10'
             routeParams.protocol = 2
+            #routeParams.route_oper_flag = "4"
             comm = RoutingCommunity(ModCommunity)
             bgpAttrCommunity = RoutingCommunityList([comm])
             routeParams.communities = bgpAttrCommunity
             routeindex = routeindex + 1
             routeList.append(routeParams)
 
-        print 'Fetched routes from JSON..'
-        print 'Total Routes.. =', routeindex
+        LOG.info('Total Routes = %d' %routeindex)
 
-        #updReq = RoutingBgpRouteUpdateRequest([routeParams])
         updReq = RoutingBgpRouteUpdateRequest(routeList)
-        # print updReq
         addRes = bgp.BgpRouteUpdate(updReq)
-        print 'Invoked Route Add API Status\nreturn = ', addRes
-        print 'Invoked Route Add API Status\nreturn = ', addRes.status
+        LOG.info('Invoked Route Add API Status\nreturn = %s' %str(addRes))
 
         # API reply captured
         statusval = addRes.status
-        addoppcomp = addRes.operations_completed
-        print('addRes.status =', statusval)
-        print('addoppcomp =', addoppcomp)
+        route_op_count = addRes.operations_completed
 
-        print "Sending info to PS"
         rtmodjsonreply = [{'returncode': str(statusval)}]
         try:
             clrmodsock.send(json.dumps(rtmodjsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
+            LOG.debug("SocketIO: Write failed")
 
     except:
-        print "Sending reply to PS"
-        # Return code where there are issues executing Update APIs
         rtmodjsonreply = [{'returncode': '104'}]
         try:
             clrmodsock.send(json.dumps(rtmodjsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
+            LOG.debug("SocketIO: Write failed")
 
     return
 
@@ -385,7 +356,7 @@ def AppRouteDelete(clrdelsock, routereq):
         # Intialising BGP
         strBgpReq = RoutingBgpRouteInitializeRequest()
         result = bgp.BgpRouteInitialize(strBgpReq)
-        print 'Invoked BgpRouteInitialize API \nreturn = ', result.status
+        LOG.info('Invoked BgpRouteInitialize API return = %s' %str(result))
 
         # List for route entries to be passed to API
         routeindex = 0
@@ -397,9 +368,8 @@ def AppRouteDelete(clrdelsock, routereq):
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
             DEST_PREFIX_LEN = destroutelst[1]
-            DEST6_NEXT_HOP = jsonentry['ipv6nh']
             DEST_ROUTE_TABLE = 'inet.0'
-            print "Route remove request received for route:", str(destroute)
+            LOG.info("Route remove request received for route:%s" %str(destroute))
 
             # Preparing parameters to call BGP Route Remove API
             tableName = RoutingRouteTableName(DEST_ROUTE_TABLE)
@@ -421,21 +391,17 @@ def AppRouteDelete(clrdelsock, routereq):
 
         remReq = RoutingBgpRouteRemoveRequest(0, routeList)
         remRes = bgp.BgpRouteRemove(remReq)
-        # print remReq
-        print 'Invoked Route remove API Status\nreturn = ', remRes
-        print 'Invoked Route remove API Status\nreturn = ', remRes.status
+        LOG.info('Invoked Route remove API Status return = %s' %str(remRes))
 
         # API reply captured
         delstatus = remRes.status
-        print "Sending info to PS"
-        print('remRes.status =', delstatus)
+        route_op_count = remRes.operations_completed
 
-        print "Sending reply to PS"
         rtaddjsonreply = [{'returncode': str(delstatus)}]
         try:
             clrdelsock.send(json.dumps(rtaddjsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
+            LOG.debug("SocketIO: Write failed")
 
     except:
         # Condition to handle when API execution was not successful
@@ -443,9 +409,7 @@ def AppRouteDelete(clrdelsock, routereq):
         try:
             clrdelsock.send(json.dumps(rtdeljsonreply))
         except:
-            print("SocketIO: Write failed.. \n")
-
-
+            LOG.debug("SocketIO: Write failed")
     return
 
 
@@ -459,9 +423,9 @@ def AppRouteGet(clrgetsock, routereq, evHandle):
     strBgpReq = RoutingBgpRouteInitializeRequest()
     try:
         result = bgp.BgpRouteInitialize(strBgpReq)
-        print 'Invoked BgpRouteInitialize API \nreturn = ', result.status
+        LOG.info('Invoked BgpRouteInitialize API return = %s' %str(result.status))
     except Exception as tx:
-        print 'Received exception: %s' % (tx.message)
+        LOG.critical('Received exception: %s' % (tx.message))
         eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
         clrgetsock.sendall(eod_data)
         os._exit(1)
@@ -489,28 +453,20 @@ def AppRouteGet(clrgetsock, routereq, evHandle):
     bgpRouteReq = RoutingBgpRouteGetRequest()
     bgpRouteReq.bgp_route = routeParams
     bgpRouteReq.or_longer = True
-    bgpRouteReq.route_count = '250'
+    bgpRouteReq.route_count = '750'
     bgpRouteReq.active_only = False
     try:
         routeGetReply = bgp.BgpRouteGet(bgpRouteReq, topic)
     except Exception as e:
-        print 'Received exception in calling JET api %s' %(e.message)
+        LOG.critical('Received exception in calling the JET api: %s' % (tx.message))
         eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
         clrgetsock.sendall(eod_data)
         os._exit(1)
-    # Start the dispatcher thread
-    #dispatch_thread = Thread(target=sendtoPS, args=(clrgetsock,), name = str(clrgetsock))
-    #dispatch_thread.setDaemon(False)
     responseQ.queue.clear()
-    #dispatch_thread.start()
-
-    #dispatch_thread.join()
     calling_thread_event.wait()
     calling_thread_event.clear()
-    print 'Invoked RouteGet API\nreturn = ', routeGetReply
-    #if getwaitflag != 1:
-    getwaitflag = 0 
-    #responseQ.queue.clear()
+    LOG.info('Invoked RouteGet API return = %s' %str(routeGetReply))
+    getwaitflag = 0
     if not responseQ.empty():
         responseQ.queue.clear()
     return
@@ -540,30 +496,27 @@ def allRouteApis():
                 thvalue = AppRouteModify(clrmodsock, routereq)
 
             else:
-                print("Unknown request could not be processed")
-                print ("Sending reply to PS")
+                LOG.debug("Unknown request could not be processed")
+                LOG.debug("Sending reply to PS")
                 jsonreply = [{'returncode': '100'}]
                 try:
                     clientsocket.send(json.dumps(jsonreply))
                 except:
-                    print("SocketIO: Write failed.. \n")
+                    LOG.debug("SocketIO: Write failed")
 
         except Exception as e:
-                print("Failed to process the request")
-		print e.message
-		# traceback.print_last()
-		traceback.print_stack()
-                print ("Sending failure reply to PS")
+                LOG.debug("Failed to process the request: %s" %str(e.message))
+                LOG.debug("Sending failure reply to PS")
                 jsonreply = [{'returncode': '100'}]
                 try:
                     clientsocket.send(json.dumps(jsonreply))
                 except:
-                    print("SocketIO: Write failed.. \n")
+                    LOG.debug("SocketIO: Write failed")
         requestQ.task_done()
 
 
 try:
-    CONNECTION_LIST = []
+    CONNECTION_LIST = list()
     for i in range(1):
         t = Thread(target=allRouteApis)
         t.setDaemon(True)
@@ -582,7 +535,7 @@ try:
         password=PASSWORD,
         ca_certs=None,
         client_id=CLIENT_ID)
-    print "Connected to the client"
+    LOG.info("Connected to the JET request response server")
 
     # Open a notification channel to receive the streaming GET response from JSD
     evHandle = client.OpenNotificationSession(
@@ -594,6 +547,7 @@ try:
         DEFAULT_MQTT_TIMEOUT,
         "",
         True)
+    LOG.info("Connected to the JET notification server")
     bgp = client.GetRoutingBgpRoute()
     prpd = client.GetRoutingBase()
 
@@ -603,10 +557,10 @@ try:
     count = 0
     getroutelist = []
     getwaitflag = 0
-    
+
     # Dictionary of sockets waiting on incomplete data for requests
     sockdict = {}
-    
+
     # Route request queue
     routereqDict = {}
 
@@ -614,11 +568,11 @@ try:
     serversocket = socket.socket(
         socket.AF_INET, socket.SOCK_STREAM)
 
-    port = 9999
+    port = 8888
     serversocket.bind(('', port))
 
-    print("Listening to Incoming Connections from the Provisioning Server")
-    serversocket.listen(2)
+    LOG.info("Listening to Incoming Connections from the Provisioning Server")
+    serversocket.listen(1)
     CONNECTION_LIST.append(serversocket)
 
     # Variable for capturing thread return
@@ -628,49 +582,48 @@ try:
         read_sockets,write_sockets,error_sockets = select.select(CONNECTION_LIST,[],[])
         for sock in read_sockets:
             if sock == serversocket:
-                sockfd, addr = serversocket.accept()
-                CONNECTION_LIST.append(sockfd)
-                print "Client (%s, %s) connected" % addr
-                print "Client socket fd = ", sock
+		if len(CONNECTION_LIST) == 2:
+		    LOG.critical('already processing a client')
+	        else:
+                    sockfd, addr = serversocket.accept()
+               	    CONNECTION_LIST.append(sockfd)
+                    LOG.info("Client (%s, %s) connected" % addr)
+                    LOG.info("Client socket fd = %s" %str(sock))
             else:
                 try:
                     # always try to read only the header first if socket not in the dict
                     if sock in sockdict:
-                        print sock, 'already present in the dictionary, will read bytes =', sockdict[sock]
+                        LOG.info("%s already present in the dictionary, will read bytes = %s" %(str(sock), str(sockdict[sock])))
                     # check for the remaining data to be read
                         psreq = sock.recv(sockdict[sockfd])
                         readlen = len(psreq)
-                        print sock, 'reading ', readlen, ' bytes'
                         if readlen < sockdict[sock]:
                             # need to read again
                             sockdict[sock] -= readlen
                             routereqDict[sock] += psreq
-                            print 'Read incomplete yet'
                         else:
                             # complete read done
-                            print 'Read completed'
+                            LOG.info('Read completed')
                             routereqDict[sock] += psreq
                             routereq = (json.loads(routereqDict[sock]))
                             requestQ.put((routereq, sock))
                             sockdict.pop(sock)
                             routereqDict.pop(sock)
                     else:
-                                        
+
                         psreq = sock.recv(HEADER_LENGTH)
                         if not psreq:
                             sock.close()
                             CONNECTION_LIST.remove(sock)
                         else:
-                            
+
                             # add this request to the sockdict
                             Version, req_type, payload_length , reserved = unpack('!ccll', psreq)
-                            print 'New Request received of size: ', payload_length
+                            LOG.info('New Request received of size: %d' %payload_length)
                             sockdict[sock] = payload_length
                             routereqDict[sock] = ''
-                            #routereq = (json.loads(psreq))
-                            #requestQ.put((routereq, sock))
                 except Exception as e:
-		    print 'Exception:', e.message
+                    LOG.debug('Exception: %s' %str(e.message))
                     sock.close()
                     CONNECTION_LIST.remove(sock)
                     continue
@@ -679,11 +632,10 @@ try:
 
     # Close session
     evHandle.Unsubscribe()
-    print "Closing the Client"
+    LOG.debug("Closing the Client")
     client.CloseRequestResponseSession()
     client.CloseNotificationSession()
 
 
 except Thrift.TException as tx:
-    print(('%s' % (tx.message)))
-
+    LOG.critical('Exception received: %s' %(tx.message))
