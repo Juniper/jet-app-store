@@ -116,16 +116,17 @@ def Main():
     mqtt_client = mqtt_connect()
 
     # Create the topic
-    ifatopic = "/junos/events/kernel/interfaces/ifa/add/ge-0/0/2.0/inet/1.1.1.1/32"
-
+    #ifatopic = "/junos/events/kernel/interfaces/ifa/add/ge-0/0/2.0/inet/1.1.1.1/32"
+    alltopics = "/junos/events/#"   # This will let you recieve all the notifications generated on the box
+    
     # Subscribe for events
-    mqtt_subscribe(mqtt_client, ifatopic, handleEvents1)
-    print "Subscribed to topic", ifatopic
+    mqtt_subscribe(mqtt_client, alltopics , handleEvents1)
+    print "Subscribed to topic", alltopics
 
     time.sleep(20)
 
     # Unsubscribe events
-    mqtt_unsubscribe(mqtt_client, ifatopic)
+    mqtt_unsubscribe(mqtt_client, alltopics)
 
     print "Disconnecting from the broker"
     # Close session
