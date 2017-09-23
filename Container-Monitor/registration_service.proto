@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package registration;
+
+// The service Registration definition.
+service Register {
+  rpc RegisterService (RegisterRequest) returns (RegisterReply) {}
+}
+
+// The request message containing the service registration info
+message RegisterRequest {
+  oneof input_type {
+    /* JSON string from the file emitted using protoc-thrift
+     * compiler
+     */
+    string json_input = 1;
+    // Absolute file path on the router containing json input
+    string file_input  = 2;
+  }
+
+  /*
+   * Target ip-address/unix domain socket for this service 
+   * For e.g., IPv6 address format will be "[::]:50051",
+   * IPv4 address format will be "0.0.0.0:50051" format and
+   * unix domain socket format will be "unix:/tmp/test_socket"
+   */
+   string target = 3;
+
+   /*
+    * Registration ID which will be used as the filename
+    * to store the APIs registered in /opt/lib.proto/<register-id>.json
+    * JSD will read the contents of this file upon restart. When the
+    * daemon re-registers the APIs, it needs to use the same register ID.
+    * This will allow JSD to delete the old file and store the new
+    * contents in that file.
+    */
+    string register_id = 4;
+
+    /*
+     * Boolean variable to indicate if JSD should skip LoginCheck()
+     * call for RPCs executed for this package from clients if they
+     * are connected using a secure channel
+     */
+     bool skip_authentication = 5;
+}
+
+/* The response message containing success or failure of the service.
+ * registration request. result value of true indicates success and
+ * false indicates failure. In case of false, error attibute indicates
+ * the reason for failure
+ */ 
+message RegisterReply {
+  bool result = 1;
+  string error = 2;
+}

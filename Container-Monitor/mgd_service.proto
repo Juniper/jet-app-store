@@ -1,0 +1,384 @@
+/*
+ * Public API for the Manageabiltiy RPC services.
+ *
+ * This IDL defines the APIs for the Junos specific management services.
+ */
+
+/*
+ *  proto3 is recommended for use with LibJAPI and gRPC
+ */
+syntax = "proto3";
+
+/*
+ * This is part of the management package.
+ */
+package management;
+
+/*
+ * MGD Service Definitions
+ */
+service ManagementRpcApi {
+
+    /*
+     * It executes the operational command specified in
+     * ExecuteOpCommandRequest. This is a streaming api
+     */
+    rpc ExecuteOpCommand (ExecuteOpCommandRequest) returns
+    (stream ExecuteOpCommandResponse) {}
+
+    /*
+     * The RPC will enable user to load and commit configuration on a junos
+     * device
+     */
+    rpc ExecuteCfgCommand (ExecuteCfgCommandRequest) returns
+    (ExecuteCfgCommandResponse) {}
+
+    /*
+     * This RPC will return the configuration in the ephemeral database
+     * for Path specified in the request
+     */
+    rpc GetEphemeralConfig (GetEphemeralConfigRequest) returns
+    (GetEphemeralConfigResponse) {}
+
+    /*
+     * This RPC will perfom load-configuration and commit in JUNOS in ephemeral
+     * database
+     */
+    rpc EditEphemeralConfig (EditEphemeralConfigRequest) returns
+    (EditEphemeralConfigResponse) {}
+}
+
+enum OperationFormatType {
+
+    // JSON format, this is default
+    OPERATION_FORMAT_JSON = 0;
+
+    // XML format
+    OPERATION_FORMAT_XML = 1;
+
+    // Text CLI format
+    OPERATION_FORMAT_CLI = 2;
+}
+
+enum JunosRpcResponseTypes {
+
+    SUCCESS = 0;
+    NOK = 1;
+    UNSUPPORTED_PATH = 2;
+    INVALID_PATH = 3;
+    INVALID_CONFIGURATION = 4;
+    UNSUPPORTED_ENCODING = 5;
+}
+
+enum JunosDataEncodingTypes {
+    ENCODING_XML = 0;
+    ENCODING_JSON = 1;
+}
+
+enum ConfigCommands {
+    UPDATE_CONFIG = 0;
+    REPLACE_CONFIG = 1;
+    DELETE_CONFIG = 2;
+}
+
+enum ConfigLoadType {
+    CONFIG_LOAD_REPLACE = 0;
+    CONFIG_LOAD_MERGE = 1;
+    CONFIG_LOAD_OVERRIDE = 2;
+    CONFIG_LOAD_UPDATE = 3;
+    CONFIG_LOAD_SET = 4;
+}
+
+enum ConfigCommitType {
+    CONFIG_COMMIT_SYNCHRONIZE = 0;
+    CONFIG_COMMIT = 1;
+}
+
+message ExecuteOpCommandRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Input Command
+     */
+    oneof command {
+	string cli_command = 2;
+	string xml_command = 3;
+	string json_command = 4;
+    }
+
+    /*
+     * Output format, default is JSON
+     */
+    OperationFormatType out_format = 5;
+}
+
+message ExecuteOpCommandResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Command Data
+     */
+    string data = 2;
+
+    /*
+     * Response code indicating the result of the command
+     */
+    JunosRpcResponseTypes status = 3;
+
+    /*
+     * Error or information text associated with the return-code value
+     */
+    string message  = 4;
+}
+
+message EphConfigRequestList {
+
+    /*
+     * Identifier for the request
+     */
+    string operation_id = 1;
+
+    /*
+     * Data model path to retrieve
+     */
+    string path = 2;
+
+}
+
+message GetEphemeralConfigRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Identifier for the encoding scheme
+     */
+    JunosDataEncodingTypes encoding = 2;
+
+    /*
+     * EphConfigRequest will contain the Path
+     */
+    repeated EphConfigRequestList eph_config_requests = 3;
+
+    /*
+     * EphInstanceName:
+     * Empty for default ephemeral instance or the name of the
+     * ephemeral instance for dynamic instance
+     */
+    string eph_instance_name = 4;
+
+    /*
+     * MergeView :
+     * True, if merge view configuration needed
+     */
+    bool merge_view = 5;
+}
+
+message GetEphemeralConfigResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    message ResponseList {
+
+        /*
+	 * The operation id is used to identify a specific
+         * configuration command, e.g., when the RPC may contain multiple
+         * commands.  The response for each command can be identified based on
+	 * the operation-id returned by the target device
+         */
+	string operation_id = 1;
+
+        /*
+         * Specifies a path in the data model path corresponding to
+         * the data in the message
+         */
+	string path = 2;
+
+        /*
+         * Data encoded using the encoding specified in set-data-encoding, or
+	 * encoding specified in the request. This data may be populated by
+	 * the management system.
+         */
+	string value = 3;
+
+        /*
+         * Response code indicating the result of the command
+         */
+        JunosRpcResponseTypes status = 4;
+
+        /*
+         * Error or information text associated with the return-code value
+         */
+	string message = 5;
+    }
+
+    /*
+     * List of responses for each configuration request
+     */
+    repeated ResponseList response = 2;
+}
+
+message EditEphemeralConfigRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    message ConfigOperationList {
+
+	/*
+	 * The operation id is used to identify a specific
+         * configuration command, e.g., when the RPC may contain multiple
+         * commands.  The response for each command can be identified based on
+	 * the operation-id returned by the target device
+         */
+	string operation_id = 1;
+
+        /*
+         * The type of configuration modification requested for the
+	 * corresponding path.Note that some commands, such as 'delete'
+	 * do not specify any associated data with the path
+         */
+	ConfigCommands operation = 2;
+
+        /*
+         * Specifies a path in the data model path corresponding to the data in
+	 * the message
+         */
+	string path = 3;
+
+        /*
+	 * Configuration data to be comitted. This data may be populated by
+	 * management system.
+         */
+	oneof value {
+	    string xml_config = 4;
+	    string json_config = 5;
+	}
+    }
+
+    /*
+     * List of configuration data items, each consisting of the data model path
+     * and corresponding data encoded based on the requested format
+     */
+    repeated ConfigOperationList eph_config_operations = 3;
+
+    /*
+     * EphInstanceName:
+     * Empty for the default ephemeral instance
+     * or The Name of the ephemeral instance for dynamic instance
+     */
+    string eph_instance_name = 4;
+
+    /*
+     * Enable validation of config
+     * For Internal Use only.
+     */
+    bool enable_config_validation = 5;
+}
+
+message EditEphemeralConfigResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    message ResponseList {
+
+        /*
+         * The operation id is used to identify a specific
+         * configuration command, e.g., when the RPC may contain multiple
+         * commands.The response for each command can be identified based on
+	 * the operation-id returned by the target device
+         */
+	string operation_id = 1;
+
+        /*
+         * Response code indicating the result of the command
+         */
+        JunosRpcResponseTypes status = 2;
+
+        /*
+         * Error or information text associated with the return-code value
+         */
+        string message = 3;
+    }
+    /*
+     * List of responses for each configuration request
+     */
+    repeated ResponseList response = 2;
+}
+
+message ConfigCommit {
+
+    /*
+     * This will specify the type of commit operation
+     * commit operation can be commit or commit-synchronize
+     */
+    ConfigCommitType commit_type = 1;
+
+    /*
+     * Specify the comment for the commit log
+     */
+    string comment = 2;
+}
+
+message ExecuteCfgCommandRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Configuration data to be comitted. This data can be populated by NMS
+     * system
+     */
+    oneof config {
+	string xml_config = 2;
+	string json_config = 3;
+	string text_config = 4;
+    }
+
+    /*
+     * Specify the type of load operation
+     */
+    ConfigLoadType load_type = 5;
+
+    /*
+     * Specify the type of commit operation
+     */
+    ConfigCommit commit = 6;
+}
+
+message ExecuteCfgCommandResponse {
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Response code indicating the result of the command
+     */
+    JunosRpcResponseTypes status = 2;
+
+    /*
+     * Error or information text associated with the return-code value
+     */
+    string message = 3;
+}

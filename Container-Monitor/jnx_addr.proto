@@ -1,0 +1,63 @@
+/*
+ * $Id$
+ *
+ * Copyright (c) 2015, Juniper Networks, Inc.
+ * All rights reserved.
+ */
+
+syntax = "proto3";
+
+package jnxBase;
+
+/*
+ * The format of network addresses that the server is to use when 
+ * responding to client requests.
+ */
+enum AddressFormat {
+    /** Addreses in replies will be represented by strings */
+    ADDRESS_STRING  = 0;
+
+    /** Addreses in replies will be represented by binary data in
+     *  byte arrays */
+    ADDRESS_BYTES   = 1;
+}
+
+/*
+ * Address family of a network address.
+ */
+enum AfType {
+    AF_UNSPECIFIED = 0; /** Not specified */
+    AF_INET        = 1; /** IPv4 address family */
+    AF_INET6       = 2; /** IPv6 address family */
+    AF_MAC         = 3; /** Ethernet MAC address family */
+}
+
+/*
+ * An IP address, which may be either IPv4 or IPv6 and be respresented
+ * by either a string or array of binary bytes. 
+ */
+message IpAddress {
+    oneof AddrFormat {
+
+         /** IP address string in standard format */
+        string        addr_string     = 1;
+
+        /** Binary IP address in network-ordered array of bytes */
+	bytes         addr_bytes      = 2;
+    }
+}
+
+/*
+ * An ethernet MAC address, which may be respresented by either a 
+ * string or array of binary bytes. 
+ */
+message MacAddress {
+    oneof AddrFormat {
+
+        /** MAC address string in standard format */
+        string        addr_string     = 1;
+
+        /** Binary MAC address in network-ordered array of bytes */
+	bytes         addr_bytes      = 2;
+    }
+}
