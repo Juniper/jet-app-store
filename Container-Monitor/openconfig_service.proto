@@ -1,0 +1,400 @@
+/*
+ * Public API for the Openconfig Manageabiltiy RPC services.
+ *
+ * This IDL defines the APIs for the manageabiltiy services.
+ */
+
+/*
+ *  proto3 is recommended for use with LibJAPI and gRPC
+ */
+syntax = "proto3";
+
+/*
+ * This is part of the openconfig package.
+ */
+package openconfig;
+
+/*
+ *MGD Service Definitions
+ */
+service OpenconfigRpcApi {
+
+    /*
+     * Return the set of data encodings supported by the device for
+     * configuration and telemetry data modeled in YANG
+     */
+    rpc GetDataEncodings (GetDataEncodingsRequest) returns (GetDataEncodingsResponse) {}
+
+    /*
+     * Select and set one of the data encodings returned by
+     * getDataEncodings.  This RPC sets the global encoding
+     * serialization for all data exchanged with the target
+     * device. The global data encoding may be optionally overriden
+     * by setting the encoding for an individual RPC if supported by the target
+     */
+    rpc SetDataEncoding (SetDataEncodingRequest) returns
+    (SetDataEncodingResponse) {}
+
+    /*
+     * Returns a repeated structure of supported data models
+     */
+    rpc GetModels (GetModelsRequest) returns (GetModelsResponse) {}
+
+    /*
+     * Requests data from the network device.  The get RPC
+     * request should include a subcommand to indicate the type of
+     * data desired by the requestor.  Supported types of data
+     * include: configuration data (config: true nodes in the schema)
+     * operational state data (config: false nodes)
+     * derived operational state only (config: false nodes that
+     * represent derived operational state, exluding config: false
+     * nodes that represent applied configuration.
+     * all data (config: true and config: false nodes)
+     * A get RPC can contain multiple requests for data.  Each
+     * request includes a path specifying a subtree in the data
+     * model, and a command to indicate which type of data should be returned
+     */
+    rpc Get (GetRequest) returns (GetResponse) {}
+
+    /*
+     * Modify configuration on the target device. The set
+     * RPC accepts a combination of commands, each with an
+     * associated path specification to indicate which data should be modified.
+     * The commands in a set request should be fully validated and accepted by
+     * the device before a response is returned.  The
+     * application of the configuration commands may or may not be
+     * complete when the command returns.  The NMS is expected to be
+     * able to track the application of the configuration using the
+     * operational state data in the telemetry stream, or by
+     * retrieving the state data using an RPC
+     */
+    rpc Set (SetRequest) returns (SetResponse) {}
+}
+
+enum OpenConfigDataEncodingTypes {
+    ENCODING_XML = 0;
+    ENCODING_JSON = 1;
+}
+
+enum GetDataCommands {
+    GET_ALL = 0;
+    GET_CONFIG = 1;
+    GET_OPSTATE = 2;
+    GET_OPER = 3;
+}
+
+enum SetConfigCommands {
+    UPDATE_CONFIG = 0;
+    REPLACE_CONFIG = 1;
+    DELETE_CONFIG = 2;
+}
+
+enum OpenConfigRpcResponseTypes {
+
+    OK = 0;
+    NOK = 1;
+    UNSUPPORTED_PATH = 2;
+    INVALID_PATH = 3;
+    INVALID_CONFIGURATION = 4;
+    UNSUPPORTED_INTERVAL = 5;
+    INVALID_SUBSCRIPTION_ID = 6;
+    UNSUPPORTED_ENCODING = 7;
+}
+
+message GetDataEncodingsRequest {
+
+    /*
+     * Identifier sent in request messages
+     */
+    uint64 request_id = 1;
+}
+
+message GetDataEncodingsResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Specifies the data encoding scheme to be used for data
+     * sent to and from the target device
+     */
+    repeated OpenConfigDataEncodingTypes encoding = 2;
+
+    /*
+     * Response code indicating the result of the command
+     */
+    OpenConfigRpcResponseTypes response_code = 3;
+
+    /*
+     * Error or information text associated with the return-code value
+     */
+    string message = 4;
+}
+
+message SetDataEncodingRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Identifier for the encoding scheme
+     */
+    OpenConfigDataEncodingTypes encoding = 2;
+}
+
+message SetDataEncodingResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Response code indicating the result of the command
+     */
+    OpenConfigRpcResponseTypes response_code = 2;
+
+    /*
+     * Error or information text associated with the return-code value
+     */
+    string message = 3;
+}
+
+message GetModelsRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+}
+
+message Model {
+
+    /*
+     * Name of the corresponding YANG module
+     */
+    string name = 1;
+
+    /*
+     * Namespace the model belongs to, whether standard or ad-hoc
+     */
+    string namespace = 2;
+
+    /*
+     * Model version -- for YANG models this should be at least the
+     * 'revision' but could also include a more conventional
+     * version number
+     */
+    string version = 3;
+}
+
+message GetModelsResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Data associated with requests for information about the
+     * data models supported by the device
+     */
+    repeated Model model = 2;
+
+    /*
+     * Response code indicating the result of the command
+     */
+    OpenConfigRpcResponseTypes response_code = 3;
+
+    /*
+     * Error or information text associated with the return-code value
+     */
+    string message = 4;
+}
+
+message GetRequestList {
+
+    /*
+     * Definition of an operation id, associated with an
+     * individual command in a mult-command RPC.
+     */
+    string operation_id = 1;
+
+    /*
+     * Command indicates what type of data should be
+     * returned from the specified path, e.g., configuration, opstate, etc
+     */
+    GetDataCommands operation = 2;
+
+    /*
+     * Specifies a path in the data model path corresponding to
+     * the data in the message
+     */
+    string path = 3;
+}
+
+message GetRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Identifier for the encoding scheme
+     */
+    OpenConfigDataEncodingTypes encoding = 2;
+
+    /*
+     * List of paths and associated commands indicating the data to
+     * be returned
+     */
+    repeated GetRequestList get_request = 3;
+}
+
+message GetResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    message ResponseList {
+
+	/*
+	* The operation id is used to identify a specific
+	* configuration command, e.g., when the set RPC may contain multiple
+	* commands.  The response for each command can be identified based on the
+	* operation-id returned by the target device
+	*/
+	string operation_id = 1;
+
+	/*
+         * Specifies a path in the data model path corresponding to
+	 * the data in the message
+         */
+	 string path = 2;
+
+	/*
+	* Data encoded using the encoding specified in set-data-encoding, or the
+	* device's default encoding.  This data may be populated by the management
+	* system, e.g., when sending configuration data, or by the device when
+	* returning configuration or operational state / telemetry data
+	*/
+	string value = 3;
+
+	/*
+	* Response code indicating the result of the command
+	*/
+	OpenConfigRpcResponseTypes response_code = 4;
+
+	/*
+	* Error or information text associated with the return-code value
+	*/
+	string message = 5;
+    }
+
+    /*
+     * List of responses for each configuration request
+     */
+    repeated ResponseList response = 2;
+}
+
+message SetRequest {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    /*
+     * Indicates whether all individual operations in the RPC request should be
+     * treated as a single transaction. Setting transaction to 'true' means the
+     * target device should return a successful response only if all operations
+     * are successful.  If any one of the operations fails for any reason, the
+     * resulting state of the device should be as if none of the operations
+     * were applied, i.e., any successful operations should be rolled back.
+     * If set to 'false', each operation may be applied independently with its
+     * own result
+     */
+    bool transaction = 2;
+
+    /*
+     * Identifier for the encoding scheme
+     */
+    OpenConfigDataEncodingTypes encoding = 3;
+
+    message ConfigOperationList {
+
+	/*
+	 * The operation id is used to identify a specific
+	 * configuration command, e.g., when the set RPC may contain multiple
+	 * commands.  The response for each command can be identified based on the
+	 * operation-id returned by the target device
+	 */
+	string operation_id = 1;
+
+	/*
+	 * The type of configuration modification requested for the corresponding
+	 * path.  Note that some commands, such as 'delete' do not specify any
+	 * associated data with the path
+	 */
+	SetConfigCommands operation = 2;
+
+	/*
+	 * Specifies a path in the data model path corresponding to the data in the
+	 * message
+	 */
+	string path = 3;
+
+	/*
+	 * Data encoded using the encoding specified in set-data-encoding, or
+	 * the device's default encoding.  This data may be populated by the
+	 * management system, e.g., when sending configuration data, or by the
+	 * device when returning configuration or operational state / telemetry data
+	 */
+	string value = 4;
+    }
+    /*
+     * List of configuration data items, each consisting of the data model path
+     * and corresponding data encoded based on the requested format
+     */
+    repeated ConfigOperationList config_operation = 4;
+}
+
+message SetResponse {
+
+    /*
+     * The request id corresponding to the request
+     */
+    uint64 request_id = 1;
+
+    message ResponseList {
+
+        /*
+         * The operation id is used to identify a specific
+         * configuration command, e.g., when the set RPC may contain multiple
+         * commands.  The response for each command can be identified based on the
+         * operation-id returned by the target device
+         */
+        string operation_id = 1;
+
+        /*
+         * Response code indicating the result of the command
+         */
+        OpenConfigRpcResponseTypes response_code = 2;
+
+        /*
+         * Error or information text associated with the return-code value
+         */
+        string message = 3;
+    }
+    /*
+     * List of responses for each configuration request
+     */
+    repeated ResponseList response = 2;
+}

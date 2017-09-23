@@ -1,0 +1,97 @@
+/**
+ * $Id$
+ *
+ * Copyright (c) 2016, Juniper Networks, Inc.
+ * All rights reserved.
+ */
+
+syntax = "proto3";
+
+import "prpd_common.proto";
+
+package routing;
+
+/**
+  * ------------------------------------------------------------------
+  * Request message to configure a purge timer for the client
+  * ------------------------------------------------------------------
+  */
+message RtPurgeConfigRequest {
+
+    // Purge time to be configured for the client
+    uint32      time     = 1;
+}
+
+/**
+  * ------------------------------------------------------------------
+  * Generic empty request message
+  * ------------------------------------------------------------------
+  */
+message RtEmptyRequest {
+}
+
+/**
+  * ------------------------------------------------------------------
+  * Reply message to get the return code for a operation performed
+  * ------------------------------------------------------------------
+  */
+message RtOperReply {
+
+    // Return code indicating the success or failure of the operation and in
+    // case of failure, the code will indicate the type of the failure which
+    // occurred.
+    ReturnCode ret_code  = 1;
+}
+
+/**
+  * ------------------------------------------------------------------
+  * Reply message to get purge timer for the client
+  * ------------------------------------------------------------------
+  */
+message RtPurgeTimeGetReply {
+
+    // Return code indicating the success or failure of the operation and in
+    // case of failure, the code will indicate the type of the failure which
+    // occurred.
+    ReturnCode ret_code  = 1;
+
+    // Purge time for the client
+    uint32      time     = 2;
+}
+
+/**
+  * ---------------------------------------------------------------
+  * APIs for the RPD Infra Operations
+  * ---------------------------------------------------------------
+  */
+service Base {
+
+    /**
+     * ---------------------------------------------------------------
+     * Service to configure purge timer for the client
+     * ---------------------------------------------------------------
+     *
+     * Configure a purge timer for the client so that server side will retain
+     * the client installed routes till this time after client disconnects and
+     * provide sufficient time for the client to reconnect if possible.
+     */
+    rpc RoutePurgeTimeConfig (RtPurgeConfigRequest) returns (RtOperReply) {}
+
+    /**
+     * ---------------------------------------------------------------
+     * Service to unconfigure purge timer for the client
+     * ---------------------------------------------------------------
+     *
+     * Unconfigure a previously configured purge timer for the client.
+     */
+    rpc RoutePurgeTimeUnconfig (RtEmptyRequest) returns (RtOperReply) {}
+
+    /**
+     * ---------------------------------------------------------------
+     * Service to retrive the purge timer for the client
+     * ---------------------------------------------------------------
+     *
+     * Get a purge timer for the client
+     */
+    rpc RoutePurgeTimeGet (RtEmptyRequest) returns (RtPurgeTimeGetReply) {}
+}

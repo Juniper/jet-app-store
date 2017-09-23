@@ -1,0 +1,468 @@
+syntax = "proto3";
+
+
+/*
+ * Package Name for DCD proto file
+ */
+package interface;
+
+
+/*
+ *  #############################################################
+ */
+
+
+
+/*******************************************
+ *         Enumeration definitions
+ *******************************************/
+
+
+/* For defining IP address and MAC address formats */
+enum AddressFormat {
+    ADDRESS_STRING                     = 0;   /* String format  */
+    ADDRESS_BYTES                      = 1;   /* Byte  format   */
+}
+
+
+/* For defining the protocol family type   */
+enum FamilyType {
+    INTF_AF_UNKNOWN                   = 0;     /* Unknown         */
+    INTF_AF_INET                      = 2;     /* INET Family     */
+    INTF_AF_INET6                     = 28;    /* INET6 Family    */
+}
+
+
+/* For defining interface tagging  */
+enum InterfaceTaggingType {
+    VLAN_TAGGING                      = 0;    /* vlan-tagging   */
+    INTERFACE_TAGGING_MAX             = 1;    /* None           */
+}
+
+
+/* For defining interface encapsulations  */
+enum InterfaceEncapsulationType {
+    VLAN_BRIDGE                       = 0;    /* vlan-bridge          */
+    VLAN_EXTENDED_BRIDGE              = 1;    /* extended-vlan-bridge */
+    INTERFACE_ENCAP_MAX               = 2;    /* None encapsulation   */
+}
+
+
+/* For defining interface status */
+enum IfStatus {
+    INTF_DOWN                         = 0;    /* Interface Down     */
+    INTF_UP                           = 1;    /* Interface Up       */ 
+}
+
+
+enum ret_status {
+    SUCCESS                           = 0;
+    FAILURE                           = 1;
+    OWNER                             = 2;
+    NOT_OWNER                         = 3; 
+    OBJECT_FOUND                      = 4;
+    OBJECT_NOT_FOUND                  = 5;
+    OBJECT_CLI_OWNER                  = 6;  /* Object created by CLI  commands */
+    OBJECT_JAPI_OWNER                 = 7;  /* Object created by Japi commands */
+    ATTRIBUTE_FOUND                   = 8;  /* Attribute found */
+    ATTRIBUTE_NOT_FOUND               = 9;  /* Attribute not found */
+    NO_PORT_NAME                      = 10;  /* Port name not specified */
+    NO_IFL_UNIT                       = 11;  /* IFL unit not specified */
+    NO_IFF_FAMILY                     = 12;  /* IFF family not specified */
+    NO_IP_ADDR                        = 13;  /* IP address not specified */
+    NO_ARP_ADDR                       = 14; /* ARP address not specified */
+    NO_ARP_MAC                        = 15; /* ARP MAC address not specified */
+}
+
+
+enum operation {
+    UNKNOWN                           = 0;
+    ADD_INTERFACE                     = 1;
+    DELETE_INTERFACE                  = 2;
+    ADD_AE_MEMBER                     = 3;
+    DELETE_AE_MEMBER                  = 4;
+    ADD_INTF_ATTRIBUTES               = 5;
+    DELETE_INTF_ATTRIBUTES            = 6;
+    DELETE_ALL_INTF_ATTRIBUTES        = 7;
+    QUERY_ATTRIBUTES                  = 8;
+    QUERY_OWNERSHIP                   = 9;
+    QUERY_PUBLIC_IFL                  = 10;
+    SET_TIMEOUT                       = 11; 
+}
+
+
+
+
+/*
+ *  #############################################################
+ */
+
+
+
+
+
+/*******************************************
+ *     Message  definitions for attributes 
+ *******************************************/
+
+
+/*  IP address definition     */
+message IpAddress {
+    oneof AddrFormat {
+        string        addr_string          = 1;
+        bytes         addr_bytes           = 2;
+    }
+}
+
+
+/*  MAC address definition     */
+message MacAddress {
+    oneof AddrFormat {
+        string        addr_string          = 1;
+        bytes         addr_bytes           = 2;
+    }
+}
+
+
+/* String attribute definition   */
+message string_attr {
+    string     attr_name                   = 1;
+    string     attr_value                  = 2;
+}
+
+
+/* Integer attribute definition   */
+message integer_attr {
+    string     attr_name                   = 1;
+    int32      attr_value                  = 2;
+}
+
+
+
+
+/*
+ *  #############################################################
+ */
+
+
+
+/*******************************************************************
+ ****     Message  definitions for configuration commands   ********
+ *******************************************************************/
+
+
+
+/****************************************************
+ *     IFD object related messages 
+ ***************************************************/
+
+/*
+ * For IFD objects configurations
+ *
+ * Eg: set interfaces ge-1/1/6 vlan-tagging
+ * Eg: set interfaces ge-1/1/6 encapsulation extended-vlan-bridge
+ */
+message InterfaceConfig {
+    string                         port_name               = 1;
+    InterfaceTaggingType           tagging                 = 2;
+    InterfaceEncapsulationType     encap                   = 3;
+    repeated string                aggregate_members       = 4;      /* List of members     */
+    repeated string_attr           string_attr_list        = 5;
+    repeated integer_attr          integer_attr_list       = 6;
+    int32                          operation               = 7;
+    int32                          client_ctx              = 8;
+    int64                          request_id              = 9;
+}
+
+
+
+
+/****************************************************
+ *     IFL object related messages 
+ ***************************************************/
+
+message Value32 {
+    int32                      unit                 = 1;
+}
+
+/*
+ * For IFL objects configurations
+ *
+ * Eg: set interfaces ge-1/1/6 unit 0 vlan-id 100 
+ * Eg: set bridge-domains vlan-100 interface ge-1/1/6.0 
+ * Eg: set routing-instances vlan-100 interface ge-1/1/6.0 
+ * Eg: set interfaces ge-1/1/6 disable
+ */
+message InterfaceLogicalConfig {
+    string                     port_name             = 1;
+    Value32                    ifl_unit              = 2;
+    string                     lr_name               = 3;
+    string                     bd_name               = 4;
+    string                     ri_name               = 5;
+    IfStatus                   status                = 6;
+    repeated string_attr       string_attr_list      = 7;
+    repeated integer_attr      integer_attr_list     = 8;
+    int32                      operation             = 9;
+    int32                      client_ctx            = 10;
+    int64                      request_id            = 11;
+}
+
+
+
+/****************************************************
+ *     IFF object related messages 
+ ***************************************************/
+
+/*
+ * For IFF objects configurations
+ *
+ * Eg: set interfaces ge-1/1/6 unit 0 vlan-id 100 
+ * Eg: set bridge-domains vlan-100 interface ge-1/1/6.0 
+ * Eg: set routing-instances vlan-100 interface ge-1/1/6.0 
+ * Eg: set interfaces ge-1/1/6 disable
+ */
+message InterfaceFamilyConfig {
+    string                     port_name             = 1;
+    Value32                    ifl_unit              = 2;
+    FamilyType                 family                = 3;
+    repeated string_attr       string_attr_list      = 4;
+    repeated integer_attr      integer_attr_list     = 5;
+    int32                      operation             = 6;
+    int32                      client_ctx            = 7;
+    int64                      request_id            = 8;
+}
+
+
+
+
+/****************************************************
+ *     IFA object related messages 
+ ***************************************************/
+
+/*
+ * For IFA objects configurations
+ *
+ * Eg: set interfaces ge-1/1/6 unit 0 family inet address 10.10.1.1/24
+ * Eg: set interfaces ge-1/1/6 unit 0 family inet6 address abcd::1/64
+ */
+message InterfaceAddressConfig {
+    string                     port_name               = 1;
+    Value32                    ifl_unit              = 2;
+    FamilyType                 family                  = 3;
+    IpAddress                  interface_address       = 4;
+    repeated string_attr       string_attr_list        = 5;
+    repeated integer_attr      integer_attr_list       = 6;
+    int32                      operation               = 7;
+    int32                      client_ctx              = 8;
+    int64                      request_id              = 9;
+}
+
+
+
+/****************************************************
+ *     RT object related messages 
+ ***************************************************/
+
+/*
+ * For RT objects configurations
+ */
+message RTConfig {
+    string                      port_name             = 1;
+    Value32                     ifl_unit              = 2;
+    FamilyType                  family                = 3;
+    IpAddress                   interface_address     = 4;
+    IpAddress                   arp_address           = 5;
+    repeated string_attr        string_attr_list      = 6;
+    repeated integer_attr       integer_attr_list     = 7;
+    int32                       operation             = 8;
+    int32                       client_ctx            = 9;
+    int64                       request_id            = 10;
+}
+
+
+
+
+/****************************************************
+ *     Response message for configuration commands
+ ***************************************************/
+message ConfigResp {
+    ret_status        status                 = 1;
+    string            error_message          = 2;
+    int64             request_id             = 3;
+    int32             client_ctx             = 4;
+}
+
+
+
+/*
+ *  #############################################################
+ */
+
+
+
+/****************************************************
+ *  List of interface related config commands 
+ ****************************************************/
+
+service InterfacesService {
+
+
+    /* Ifd configuration */
+    rpc InterfaceCreate(InterfaceConfig) returns (ConfigResp) {}
+    rpc InterfaceDelete(InterfaceConfig) returns (ConfigResp) {}
+
+    /* Ifl configuration */
+    rpc InterfaceLogicalCreate(InterfaceLogicalConfig) returns (ConfigResp) {}
+    rpc InterfaceLogicalDelete(InterfaceLogicalConfig) returns (ConfigResp) {}
+
+    /*  IFF configuration */
+    rpc InterfaceFamilyCreate(InterfaceFamilyConfig) returns (ConfigResp) {}
+    rpc InterfaceFamilyDelete(InterfaceFamilyConfig) returns (ConfigResp) {}
+
+
+    /* IP address setting for interfaces */
+    rpc InterfaceAddressCreate(InterfaceAddressConfig) returns (ConfigResp) {}
+    rpc InterfaceAddressDelete(InterfaceAddressConfig) returns (ConfigResp) {}
+
+    /* RT address setting for interfaces */
+    rpc InterfaceRTAddressCreate(RTConfig) returns (ConfigResp) {}
+    rpc InterfaceRTAddressDelete(RTConfig) returns (ConfigResp) {}
+}
+
+
+
+
+
+
+
+/*
+ *  #############################################################
+ */
+
+
+
+
+/**********************************************************
+ ****     Message definitions for Query commands   ********
+ **********************************************************/
+
+
+/*******************************************************
+ *     Message structure for attribute query command    
+ ******************************************************/
+message AttributeRequestInfo {
+    string                      port_name             = 1;
+    Value32                     ifl_unit              = 2;
+    FamilyType                  family                = 3;
+    IpAddress                   interface_address     = 4;
+    IpAddress                   arp_address           = 5;
+    repeated string_attr        string_attr_list      = 6;
+    repeated integer_attr       integer_attr_list     = 7;
+    int32                       client_ctx            = 8;
+    int64                       request_id            = 9;
+}
+
+
+
+/*******************************************************
+ *     Message structure for attribute query response    
+ ******************************************************/
+message AttributeResponseInfo {
+    ret_status                 status                  = 1;
+    string                     error_message           = 2;
+    repeated string_attr       string_attr_list        = 3;
+    repeated integer_attr      integer_attr_list       = 4;
+    int32                      client_ctx              = 5;
+    int64                      request_id              = 6;
+}
+
+
+
+/****************************************************
+ *  List of interface attribute related query commands 
+ ****************************************************/
+
+service AttrQueryService {
+    rpc InterfacesQueryAttribute(AttributeRequestInfo) returns (AttributeResponseInfo) {}
+}
+
+
+
+/***********************************************************
+ *  Message structure for object ownership query command    
+ ***********************************************************/
+message ObjectOwnershipQuery {
+    string                      port_name             = 1;
+    Value32                     ifl_unit              = 2;
+    FamilyType                  family                = 3;
+    IpAddress                   interface_address     = 4;
+    IpAddress                   arp_address           = 5;
+    int32                       client_ctx            = 6;
+    int64                       request_id            = 7;
+}
+
+
+
+/*******************************************************
+ *     Message structure for ownership query response    
+ ******************************************************/
+message ObjectOwnershipResp {
+    ret_status                 status                  = 1;
+    string                     error_message           = 2;
+    int32                      client_ctx              = 3;
+    int64                      request_id              = 4;
+}
+
+
+
+/****************************************************
+ *  List of object ownership related query commands 
+ ****************************************************/
+
+service ObjectQueryService {
+    rpc isObjectOwner(ObjectOwnershipQuery) returns (ObjectOwnershipResp) {}
+}
+
+
+/****************************************************
+ *    API for setting timeout in sec for the client *
+ ***************************************************/
+
+message TimeoutInfo {
+    int32                    timeout            = 1;
+}
+
+message TimeoutResp {
+    ret_status               status             = 1;
+    string                   error_message      = 2;
+}
+
+service TimeoutService {
+     rpc  setClientTimeout (TimeoutInfo)  returns (TimeoutResp) {}
+}
+
+
+
+
+
+/*******************************************************
+ *     Message structure for Public IFL query response *
+ ******************************************************/
+message PublicIflResp {
+    ret_status                 status                  = 1;
+    string                     error_message           = 2;
+    int32                      client_ctx              = 3;
+    int64                      request_id              = 4;
+}
+
+
+
+/****************************************************
+ *  List of Public IFL query  commands              *
+ ****************************************************/
+
+service PublicIflService {
+    rpc isPublicIfl(InterfaceLogicalConfig) returns (PublicIflResp) {}
+}
+
+
