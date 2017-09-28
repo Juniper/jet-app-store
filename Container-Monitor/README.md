@@ -8,8 +8,6 @@ The objective of this project is to illustrate how to use the JET APIs on Junos 
 - Publish application output similar to the output from a Junos operations mode command
 - Demonstrate the ability to use XML RPC for the newly created operation mode command
 
-This document includes examples with step-by-step instructions for configuring the device and servers to utilize JET APIs.
-
 # Use Case Overview
 
 This project addresses the use case where Network operators need the visibility into location of containers with respect to the network for troubleshooting. On any given network device, Network operators can run an operations mode command to identify the containers and the nodes connected to that switch. This information can be obtained either from the CLI or queried remotely using XML RPC.
