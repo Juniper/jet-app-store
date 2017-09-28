@@ -1,4 +1,4 @@
-# Docker Container Monitoring using JET and YANG
+# Container Monitoring using JET and YANG
 
 # About This Network Configuration Example
 
