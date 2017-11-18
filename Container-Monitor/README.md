@@ -77,18 +77,18 @@ From git clone, copy the py/cmonitor.py script, rpc-docker-containers.yang, juno
 
 
 ## Step6: Extend the Operational mode CLI using the YANG support infrastructure in the QFX switches
-On the operations mode CLI of the QFX switches, execute the following
+On the operations mode CLI of the QFX switches, execute the following  
 request system yang add package docker-rpc module [/var/tmp/docker-jet/rpc-docker-containers.yang /var/tmp/docker-jet/junos-extension.yang /var/tmp/docker-jet/junos-extension-odl.yang] action-script /var/tmp/docker-jet/cmonitor.py
 
-### Verification
+# Verification
 Verification on QFX switch
-1.	Verify that the Docker worker nodes have been discovered through LLDP.
-user@host> show lldp neighbors    
+1.	Verify that the Docker worker nodes have been discovered through LLDP.  
+user@host> show lldp neighbors  
 
-2.	Verify that the switch is able to show the containers on the attached worker nodes.
+2.	Verify that the switch is able to show the containers on the attached worker nodes.  
 user@host> show docker containers 
 
-3.	Verify that the YANG module and the action script are configured properly.
+3.	Verify that the YANG module and the action script are configured properly.  
 user@host> show system yang package 
 
 
