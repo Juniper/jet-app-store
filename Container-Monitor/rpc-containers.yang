@@ -21,7 +21,7 @@ module rpc-docker-containers {
 
      junos:command "show docker containers";
      junos:action-execute {
-       junos:script "demo.py";
+       junos:script "cmonitor.py";
      }
 
 
