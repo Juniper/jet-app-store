@@ -50,3 +50,33 @@ The cmonitor.py script running on the box performs the following tasks
 - --Identify the list of containers that are attached directly to this QFX switch
 - --The script will render the collected information to the screen like a regular Junos show command output
 
+## Enable Extension Services on the QFX Switches
+show configuration system scripts 
+language python;
+
+show configuration system services xnm-clear-text 
+connection-limit 75;
+rate-limit 150;
+
+show configuration system services extension-service 
+request-response {
+    grpc {
+        clear-text {
+            address 0.0.0.0;
+            port 32767;
+        }
+    }
+}
+
+show configuration system extensions                     
+extension-service {
+    application {
+        file cmonitor.py;
+    }
+}
+
+## Enable LLDP on the QFX switches
+show configuration protocols lldp 
+interface all;
+
+
