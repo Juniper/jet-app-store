@@ -20,7 +20,10 @@ JSD_PORT = 32767
 USERNAME = 'xxxx'       # Update with your device login details
 PASSWORD = 'xxxxx'       # Update with your device login details
 CLIENT_ID = 'demo'
-_TIMEOUT_SECONDS = 20
+_TIMEOUT_SECONDS = 20  
+
+# Docker details
+DBASE_URL = 'tcp://10.92.70.225:2375'  
 
 def EstablishChannel(address, port, client_id, user, password):
     # Open a grpc channel to the device
@@ -115,7 +118,7 @@ def printContainers(client, channel):
     return xml_items
 
 def Main():
-    cli = docker.DockerClient(base_url="tcp://10.92.70.225:2375")
+    cli = docker.DockerClient(base_url=DBASE_URL)
     channel = EstablishChannel(JSD_IP, JSD_PORT, CLIENT_ID, USERNAME, PASSWORD)
     xml_items = printContainers(cli, channel)
     xml = etree.Element('docker-container-info')
