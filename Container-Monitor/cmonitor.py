@@ -124,11 +124,11 @@ def Main():
     xml = etree.Element('docker-container-info')
     for xml_item in xml_items:
         xml.append(xml_item)
-    #print(etree.tostring(xml, pretty_print=True))
+    
 
 if __name__ == '__main__':
     t0 = time.time()
     Main()
     t1 = time.time()
     total = t1 - t0
-    #print total
+    
