@@ -15,7 +15,7 @@ import time
 from lxml import etree
 
 # Device details and login credentials
-JSD_IP = '10.9.70.14'   # Update with your device name/IP
+JSD_IP = '127.0.0.1'   # Update with your device name/IP
 JSD_PORT = 32767  
 USERNAME = 'xxxx'       # Update with your device login details
 PASSWORD = 'xxxxx'       # Update with your device login details
