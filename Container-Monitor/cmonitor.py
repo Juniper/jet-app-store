@@ -40,7 +40,7 @@ def EstablishChannel(address, port, client_id, user, password):
 
 def getSocket(hostName, parsedResponse):
 
-    hostName = hostName + ".englab.juniper.net"
+    hostName = hostName
     socketHost = 'Unknown'
     socketRemote = 'Unknown'    
     index = 0
