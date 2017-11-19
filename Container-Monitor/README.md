@@ -61,7 +61,8 @@ set system services extension-service request-response grpc clear-text port 3276
 
 set system extensions extension-service application file demo.py
 
-## Step2: Enable LLDP on the QFX switches
+## Step2: Set Loopback IP and Enable LLDP on the QFX switches
+set interfaces lo0 unit 0 family inet address 127.0.0.1/32
 set protocols lldp interface all
 
 ## Step3: Copy the necessary JET API modules for this use case
