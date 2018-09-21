@@ -17,8 +17,8 @@ port = 8888
 s.connect((host, port))
 
 
-DEST_PREFIX_ADD = '80.10.1.15/32'
-next_hop = '20.10.2.1'
+DEST_PREFIX_ADD = '192.168.10.1/32'
+next_hop = '172.16.2.1'
 routeinfo.append({'ipv4address':str(DEST_PREFIX_ADD), 'next_hop':str(next_hop), 'community':'100:101', 'action':'modify' })
 
 print("Preparing Route Information JSON Object")

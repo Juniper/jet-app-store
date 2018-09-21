@@ -17,7 +17,7 @@ port = 8888
 s.connect((host, port))
 
 
-DEST_PREFIX_ADD = '80.10.1.15/32'
+DEST_PREFIX_ADD = '192.168.10.1/32'
 routeinfo.append({'ipv4address':str(DEST_PREFIX_ADD), 'action':'delete' })
 
 print("Preparing Route Information JSON Object")
