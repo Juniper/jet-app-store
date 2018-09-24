@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is to get system up time of jet server.
+"""
+
 #!/usr/bin/env python
 #
 # Import Python GRPC module

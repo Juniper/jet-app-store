@@ -18,6 +18,8 @@
 # limitations under the License.
 
 """
+Copyright 2018 Juniper Networks Inc.
+
 Sample Provisional Server code to perform GET request from the JET app.
 This app should send the GET request in the following JSON format:
 
@@ -29,7 +31,7 @@ The response received by this client from JET app is of the following format:
 |-------------------------------------------------------------------------------|
 
 Payload will be of the format:
-[{'ipv4address':'20.1.1.1', 'ipv6nh':'2001:2:1:1::1', 'community':'17676:10001' },..]
+[{'ipv4address':'10.1.1.1', 'ipv6nh':'2001:2:1:1::1', 'community':'17676:10001' },..]
 [{"action": "query", "prefix": "all"}]
 Last message sent by this app will carry 0 payload length. In case, GET requests encounter any
 error from the JUNOS router, then in that case, response status will be non-zero. This

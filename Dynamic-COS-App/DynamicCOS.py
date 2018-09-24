@@ -1,23 +1,27 @@
 #!/usr/bin/env python
+
+"Copyright 2018 Juniper Networks Inc."
 "This Dynamic COS App monitors satellite site's modems in 10 seconds interval and detects the changes in modem codes, error noise ratios"\
 "and symbol rates. Then computes new COS values based on changes in modem values and generate cos configurations and dynamically pushes"\
 "to site's ingess interface of MX based Edge router and also updates dynamic server db with new values"
 
-import time, re, yaml
+import os
+import re
+import sys
+import time
+import yaml
 from glob import glob
 
-# JET login imports
-from jnpr.jet.JetHandler import *
-
-#firewall
-from jnpr.jet.firewall import *
-from jnpr.jet.firewall.ttypes import *
-
-#Management
-from jnpr.jet.management import *
-from jnpr.jet.management.ttypes import *
+import grpc
 from pysnmp.entity.rfc3413.oneliner import ntforg
 from pysnmp.proto import rfc1902
+
+#for off box compatibility append the location into python path
+sys.path.insert(0,os.path.join(os.path.dirname(__file__),'grpc_api'))
+import authentication_service_pb2
+import firewall_service_pb2
+import jnx_addr_pb2
+import mgd_service_pb2
 
 with open(glob('input.yml')[0]) as fh:
     data = yaml.load(fh.read())
@@ -49,42 +53,86 @@ mgmt_ = {}
 #"SNMP OIDS to GET MODCODS, SITE TYPE, etc"
 xml_query1 = "<get-snmp-object><snmp-object-name>jnxUtilStringValue.83.105.116.101.67.116.114.73.112.65.100.100.114" \
              "</snmp-object-name></get-snmp-object>"
-op_oid1 = OperationCommand(xml_query1, in_format=OperationFormatType.OPERATION_FORMAT_XML,
-                           out_format=OperationFormatType.OPERATION_FORMAT_XML);
+op_oid1 = mgd_service_pb2.ExecuteOpCommandRequest(request_id=1,
+                                                  xml_command=xml_query1,
+                                                  out_format= mgd_service_pb2.OPERATION_FORMAT_XML);
 xml_query2 = "<get-snmp-object><snmp-object-name>jnxUtilCounter32Value.83.105.116.101.84.121.112.101" \
              "</snmp-object-name></get-snmp-object>"
-op_oid2 = OperationCommand(xml_query2, in_format=OperationFormatType.OPERATION_FORMAT_XML,
-                           out_format=OperationFormatType.OPERATION_FORMAT_XML);
+op_oid2 = mgd_service_pb2.ExecuteOpCommandRequest(request_id=2,
+                                                  xml_command=xml_query2,
+                                                  out_format= mgd_service_pb2.OPERATION_FORMAT_XML);
 xml_query3 = "<get-snmp-object><snmp-object-name>jnxUtilCounter32Value.77.111.100.67.111.100" \
              "</snmp-object-name></get-snmp-object>"
-op_oid3 = OperationCommand(xml_query3, in_format=OperationFormatType.OPERATION_FORMAT_XML,
-                           out_format=OperationFormatType.OPERATION_FORMAT_XML);
+op_oid3 = mgd_service_pb2.ExecuteOpCommandRequest(request_id=3,
+                                                  xml_command=xml_query3,
+                                                  out_format= mgd_service_pb2.OPERATION_FORMAT_XML);
 
-#"This function gets site details like existing and latest MODCODS, SITE TYPE, SITE IP"
+
+def _get_network_addr(addr_string):
+    """
+    Constructs a prpd_common_pb2.NetworkAddress object from the string
+    :param addr_string: IPv4 string
+    :return: return prpd_common_pb2.NetworkAddress 
+    """
+    ip = jnx_addr_pb2.IpAddress(addr_string=addr_string)
+    return ip
+
+
+def _authenticateChannel(channel, user, passw, client_id):
+    """
+    This method authenticates the provided grpc channel.
+    """
+    sec_stub = authentication_service_pb2.LoginStub(channel)
+    cred = authentication_service_pb2.LoginRequest(user_name=user,
+                                                   password=passw,
+                                                   client_id=client_id)
+    res = sec_stub.LoginCheck(cred)
+    return res
+
+
 def Get_Site_Latest_Data():
+    """
+    This function gets site details like
+    existing and latest MODCODS, SITE TYPE, SITE IP
+    """
     while(True):
         "Get all Sites MODCOD"
         for i in range(1, n+1):
             "Get site IP"
-            result1 = globals()['mgmt_S%s' %i].ExecuteOpCommand(op_oid1)
-            if result1.status.err_code == 0:
-                if re.search (r"<object-value>(\d+.\d+.\d+.\d+)", str(result1)):
-                    counter1 = re.search (r"<object-value>(\d+.\d+.\d+.\d+)", str(result1))
+            command_result = globals()['mgmt_S%s' % i].ExecuteOpCommand(op_oid1)
+            result1 = None
+            for res in command_result:
+                if res.request_id == 1:
+                    result1 = res
+                    break
+            if result1.status == mgd_service_pb2.SUCCESS:
+                if re.search (r"<object-value>(\d+.\d+.\d+.\d+)", str(result1.data)):
+                    counter1 = re.search (r"<object-value>(\d+.\d+.\d+.\d+)", str(result1.data))
                     SITE_IP = counter1.group(1)
                     print "##################SITE-S{} POLLED DATA& ACTIONS################".format(i)
                     print "SITE-S{} IP: ".format(i) + SITE_IP
                     "Get Site Type i.e enable/disabled"
-                    result2 = globals()['mgmt_S%s' %i].ExecuteOpCommand(op_oid2)
-                    if result2.status.err_code == 0:
-                        if re.search (r"<object-value>(\d+)", str(result2)):
-                            counter2 = re.search (r"<object-value>(\d+)", str(result2))
+                    command_result = globals()['mgmt_S%s' %i].ExecuteOpCommand(op_oid2)
+                    result2 = None
+                    for res in command_result:
+                        if res.request_id == 2:
+                            result2 = res
+                            break
+                    if result2.status == mgd_service_pb2.SUCCESS:
+                        if re.search (r"<object-value>(\d+)", str(result2.data)):
+                            counter2 = re.search (r"<object-value>(\d+)", str(result2.data))
                             SITE_TYPE = counter2.group(1)
                             print "SITE-S{} TYPE: ".format(i) + SITE_TYPE
                             "Get Site MODCOD"
-                            result3 = globals()['mgmt_S%s' %i].ExecuteOpCommand(op_oid3)
-                            if result3.status.err_code == 0:
-                                if re.search (r"<object-value>(\d+)", str(result3)):
-                                    counter3 = re.search (r"<object-value>(\d+)", str(result3))
+                            command_result = globals()['mgmt_S%s' %i].ExecuteOpCommand(op_oid3)
+                            result3 = None
+                            for res in command_result:
+                                if res.request_id == 3:
+                                    result3 = res
+                                    break
+                            if result3.status == mgd_service_pb2.SUCCESS:
+                                if re.search (r"<object-value>(\d+)", str(result3.data)):
+                                    counter3 = re.search (r"<object-value>(\d+)", str(result3.data))
                                     SITE_MODCOD = counter3.group(1)
                                     print "SITE-S{} MODCOD: ".format(i) + SITE_MODCOD
                                     if (int(SITE_MODCOD) <= 28):
@@ -92,7 +140,8 @@ def Get_Site_Latest_Data():
                                         SITE_C_CIR = globals()['CIR_S%s' % i]
                                         SITE_C_PIR = SITE_C_CIR*3
                                         SITE_C_MODCOD = globals()['MODCOD_S%s' % i]
-                                        Verify_Current_Site_Data(SITE_TYPE, SITE_MODCOD, SITE_SR, SITE_C_MODCOD)
+                                        SITE_ID = i
+                                        Verify_Current_Site_Data(SITE_TYPE, SITE_MODCOD, SITE_SR, SITE_C_MODCOD, SITE_ID)
                                         globals()['TYPE_S%s' % i] = SITE_TYPE
                                         globals()['MODCOD_S%s' % i] = SITE_MODCOD
                                         print "###################END OF ACTIONS ON SITE-{}##################\n".format(i)
@@ -115,8 +164,11 @@ def Get_Site_Latest_Data():
         time.sleep(poll_interval)
     print "Closing connection"
 
-#"This function creates new CIR and PIR based on existing and latest site data"
-def Verify_Current_Site_Data(SITE_TYPE, SITE_MODCOD, SITE_SR, SITE_C_MODCOD):
+
+def Verify_Current_Site_Data(SITE_TYPE, SITE_MODCOD, SITE_SR, SITE_C_MODCOD, SITE_ID):
+    """
+    This function creates new CIR and PIR based on existing and latest site data
+    """
     if (SITE_TYPE == 0):
         print "CIR/PIR modifications not required for DISABLED Site"
     else:
@@ -125,125 +177,134 @@ def Verify_Current_Site_Data(SITE_TYPE, SITE_MODCOD, SITE_SR, SITE_C_MODCOD):
         else:
             mcode = MODCODS[int(SITE_MODCOD)]
             New_CIR = float(mcode)*float(SITE_SR)
-            print "Modified CIR Value:", New_CIR
+            print "Modified CIR Value: {}".format(New_CIR)
             New_PIR = 1.5*New_CIR
-            print "Modified PIR Value:", New_PIR
-            Apply_Cos(New_CIR,New_PIR)
+            print "Modified PIR Value: {}".format(New_PIR)
+            Apply_Cos(New_CIR, New_PIR, SITE_ID)
 
-#"This function applies COS to MX router in case there is a change in MODCODS"
-def Apply_Cos(New_CIR,New_PIR):
+
+def Apply_Cos(New_CIR, New_PIR, SITE_ID):
+    """
+    This function applies COS to MX router in case there is a change in MODCODS
+    """
     for i in range(1, n-1):
-        "Modify policer with new CIR values using JET APIS"
-        policer = AccessListPolicer()
-        policer.policer_params = PolicerTwoColor()
-        policer.policer_flag = PolicerFlags.TERM_SPECIFIC
-        policer.policer_params.bandwidth = New_CIR
-        policer.policer_params.bw_unit = PolicerRate.MB
-        policer.policer_params.burst_size = 300
-        policer.policer_params.burst_unit = PolicerRate.BYTE
-        policer.policer_params.discard = AclBooleanType.TRUE
-        policer.policer_name= 'Policer_S%s' % i
-        "Pushing policer changes using JET AccessListPolicerChange add API"
-
-        result = globals()['fw_R%s' %i].AccessListPolicerChange(policer)
-        if result.err_code == 0:
-            print 'Modified policer CIR in Router R%d with new value:' %i, New_CIR
+        print "Modify policer with new CIR values using JET APIS"
+        policer_name = 'Policer_S%s' % SITE_ID
+        policer_type = firewall_service_pb2.ACL_TWO_COLOR_POLICER
+        policer_flag = firewall_service_pb2.ACL_POLICER_FLAG_TERM_SPECIFIC
+        color_param = firewall_service_pb2.AclPolicerTwoColor(bw_unit=firewall_service_pb2.ACL_POLICER_RATE_MBPS,
+                                                              bandwidth=int(New_CIR),
+                                                              burst_unit=firewall_service_pb2.ACL_POLICER_BURST_SIZE_KBYTE,
+                                                              burst_size=300,
+                                                              discard=firewall_service_pb2.ACL_TRUE)
+        policer_params = firewall_service_pb2.AclPolicerParameter(two_color_parameter=color_param)
+        policer = firewall_service_pb2.AccessListPolicer(policer_name=policer_name,
+                                                         policer_type=policer_type,
+                                                         policer_flag=policer_flag,
+                                                         policer_params=policer_params)
+        print "Pushing policer changes using JET AccessListPolicerChange API"
+        result = globals()['fw_R%s' % i].AccessListPolicerReplace(policer)
+        if result.status == firewall_service_pb2.ACL_STATUS_EOK:
+            print 'Modified policer CIR in Router R{} with new value: {}'.format(i, New_CIR)
             "Verify Modified policer CIR values"
-            filter = AccessList()
-            filter.acl_name = 'Filter_S%s' % i
-            filter.acl_type = AccessListTypes.CLASSIC
-            filter.acl_family = AccessListFamilies.INET
-            policerStats = AccessListPolicerCounter()
-            policerStats.acl = filter
-            policerStats.policer_name = 'Policer_S%s' % i
-            ret = globals()['fw_R%s' %i].AccessListPolicerCounterStatsGet(policerStats)
-            if result.err_code == 0:
+
+            accessList = firewall_service_pb2.AccessList(acl_name='Filter_S%s' % SITE_ID,
+                                    acl_type=firewall_service_pb2.ACL_TYPE_CLASSIC,
+                                    acl_family=firewall_service_pb2.ACL_FAMILY_INET)
+            policerStats = firewall_service_pb2.AccessListCounter(acl=accessList,
+                                                                 counter_name='Policer_S%s-t2' % SITE_ID)
+
+            ret = globals()['fw_R%s' %i].AccessListPolicerCounterGet(policerStats)
+            if ret.status == firewall_service_pb2.ACL_STATUS_EOK:
                 print 'Modified policer CIR changes are effective'
             else:
                 print 'Modified policer CIR changes are not effective'
         else:
-            print 'Modification of policer CIR value failed for site S%s' %i
-        "Can be done further verifications with cli commands using JET management APIs like below"
-        # print 'Invoked AccessListPolicerCounterStatsGet:\nresult= ', ret
-        #
-        # op_command = OperationCommand("request pfe execute command \"show filter\" target fpc0 | match S%s" %i,
-        #                 OperationFormatType.OPERATION_FORMAT_CLI, OperationFormatType.OPERATION_FORMAT_XML);
-        #
-        # result = globals()['mgmt_%s' %j].ExecuteOpCommand(op_command)
+            print 'Modification of policer CIR value failed for site S%s' % SITE_ID
+        
 
-#"Initial configuration before start monitoring sites"
 def Initial_Cos_Configs():
-
+    """
+    Initial configuration before start monitoring sites
+    """
     for j in range(1, n-1):
         for i in range(1, n+1):
             "Policer API configuration template"
-            policer = AccessListPolicer()
-            policer.policer_params = PolicerTwoColor()
-            policer.policer_flag = PolicerFlags.TERM_SPECIFIC
-            policer.policer_params.bandwidth = int(globals()['CIR_S%s' % i])
-            policer.policer_params.bw_unit = PolicerRate.MB
-            policer.policer_params.burst_size = 300
-            policer.policer_params.burst_unit = PolicerRate.BYTE
-            policer.policer_params.discard = AclBooleanType.TRUE
-            policer.policer_name= 'Policer_S%s' % i
+            policer_name = 'Policer_S%s'%i
+            policer_type = firewall_service_pb2.ACL_TWO_COLOR_POLICER
+            policer_flag = firewall_service_pb2.ACL_POLICER_FLAG_TERM_SPECIFIC
+            color_param = firewall_service_pb2.AclPolicerTwoColor(bw_unit=firewall_service_pb2.ACL_POLICER_RATE_MBPS,
+                                                                  bandwidth=int(globals()['CIR_S%s'%i]),
+                                                                  burst_unit=firewall_service_pb2.ACL_POLICER_BURST_SIZE_KBYTE,
+                                                                  burst_size=300,
+                                                                  discard=firewall_service_pb2.ACL_TRUE)
+            policer_params = firewall_service_pb2.AclPolicerParameter(two_color_parameter=color_param)
+            policer =  firewall_service_pb2.AccessListPolicer(policer_name=policer_name,
+                                                              policer_type=policer_type,
+                                                              policer_flag=policer_flag,
+                                                              policer_params=policer_params)
 
-            "Pushing policer configs using JET AccessListPolicerAdd add API"
+            "Pushing policer configs using JET AccessListPolicerAdd API"
             result = globals()['fw_R%s' %j].AccessListPolicerAdd(policer)
-
+            if result.status != firewall_service_pb2.ACL_STATUS_EOK:
+                print "Something went wrong for R%s"%j
+                print "Status received %s"%result.status
+                exit()
+            
             "Firewall Terms configuration template"
-            term2 = AclInetEntry()
-            term2.ace_name = "t2"
-            term2.ace_op = AclEntryOperation.ADD
-            term2match1 = AclEntryMatchInet()
-            op=AclMatchOperation.EQUAL
-            src2 = AclMatchIpAddress("172.16.1.2", 32, op)
-            term2match1.match_src_addrs = [src2]
-            term2Action1 = AclEntryInetAction()
-            term2Action1.action_t = AclEntryInetTerminatingAction()
-            term2Action1.action_t.action_accept = AclBooleanType.TRUE
-            term2Action1_nt = AclEntryInetNonTerminatingAction()
-            term2Action1_nt.action_count = AclActionCounter("count2")
-            term2Action1.actions_nt = []
-            term2Action1_nt.action_police=AclActionPolicer()
-            "Mapping above created policer to term2"
-            term2Action1_nt.action_police.policer = policer
-            term2Action1.actions_nt.append(term2Action1_nt)
-            term2.actions=[]
-            term2.actions.append(term2Action1)
-            term2.matches=[]
-            term2.matches.append(term2match1)
-            tlist2 = AclEntry()
-            tlist2.inet_entry = term2
+            match_src_addr = firewall_service_pb2.AclMatchIpAddress(addr=_get_network_addr("172.16.1.2"),
+                                                                    prefix_len=32,
+                                                                    match_op=firewall_service_pb2.ACL_MATCH_OP_EQUAL)
+            entry_match = firewall_service_pb2.AclEntryMatchInet(match_src_addrs =[match_src_addr])
+            entry_adjacency = firewall_service_pb2.AclAdjacency(type=firewall_service_pb2.ACL_ADJACENCY_BEFORE)
+
+            action_counter = firewall_service_pb2.AclActionCounter(counter_name="count2")
+            action_policer = firewall_service_pb2.AclActionPolicer(policer=policer)
+            non_terminating_action = firewall_service_pb2.AclEntryInetNonTerminatingAction(action_count=action_counter,
+                                                                                            action_policer=action_policer)
+            terminating_action = firewall_service_pb2.AclEntryInetTerminatingAction(action_accept=firewall_service_pb2.ACL_TRUE)
+            entry_action = firewall_service_pb2.AclEntryInetAction(actions_nt=non_terminating_action,               
+                                                                   action_t=terminating_action)
+            
+            single_entry = firewall_service_pb2.AclInetEntry(ace_name="t2",
+                                                             ace_op=firewall_service_pb2.ACL_ENTRY_OPERATION_ADD,
+                                                             matches=entry_match,
+                                                             adjacency=entry_adjacency,
+                                                             actions=entry_action)
+            acl_entry = firewall_service_pb2.AclEntry(inet_entry=single_entry)
+            ace_list =[acl_entry] 
 
             "Creating filter and mapping terms"
-            filter = AccessList()
-            filter.acl_name = 'Filter_S%s' % i
-            filter.acl_type = AccessListTypes.CLASSIC
-            filter.acl_family = AccessListFamilies.INET
-            filter.acl_flag = AccessListFlags.NONE
-            filter.ace_list=[tlist2]
-
-            "Pushing firewall filer configuration using JET FW AccessListAdd Add API"
-            result = globals()['fw_R%s' %j].AccessListAdd(filter)
-
-            "Bind filter configuration template"
-            bindobj = AccessListObjBind()
-            bindobj.acl = filter
-            bindobj.obj_type = AccessListObjType.FILTER_OBJ_INTERFACE
-            bindobj.bind_object = globals()['R%s_IF_S%s' %(j, i)]
-            bindobj.bind_direction = AclBindDirection.INPUT
-            bindobj.bind_family = AccessListFamilies.INET
-
-            "Bind filter to physical interface using JET AccessListBindAdd"
+            accessList = firewall_service_pb2.AccessList(acl_name='Filter_S%s' % i,
+                                                        acl_type=firewall_service_pb2.ACL_TYPE_CLASSIC,
+                                                        acl_family=firewall_service_pb2.ACL_FAMILY_INET,
+                                                        acl_flag=firewall_service_pb2.ACL_FLAGS_NONE,
+                                                        ace_list=ace_list)
+            print "Pushing firewall filter configuration using JET FW AccessListAdd API"
+            result = globals()['fw_R%s' %j].AccessListAdd(accessList)
+            if result.status != firewall_service_pb2.ACL_STATUS_EOK:
+                print "Something went wrong for R%s"%j
+                print "Status received %s"%result.status
+                exit()
+            print "Bind filter configuration template"
+            bindobj = firewall_service_pb2.AccessListObjBind(acl=accessList,
+                                                            obj_type=firewall_service_pb2.ACL_BIND_OBJ_TYPE_INTERFACE,
+                                                            bind_object=globals()['R%s_IF_S%s' %(j, i)],
+                                                            bind_direction=firewall_service_pb2.ACL_BIND_DIRECTION_INPUT,
+                                                            bind_family=firewall_service_pb2.ACL_FAMILY_INET)
+            print "Bind filter to physical interface using JET AccessListBindAdd"
             result = globals()['fw_R%s' %j].AccessListBindAdd(bindobj)
-            if result.err_code != 0:
+            if result.status != firewall_service_pb2.ACL_STATUS_EOK:
                 print "Site_S%s Initial COS configuration activation failed" %i
-
+                print "Status received %s"%result.status
+                exit()
             else:
                 print "Site_S%s Initial COS configuration activation in Router_R%s is successful" %(i,j)
 
-#Notifies site failures to network management server
 def notification_send(SITE_IP):
+    """
+    Notifies site failures to network management server
+    """
     ntfOrg = ntforg.NotificationOriginator()
 
     #ntforg.CommunityData('public', mpModel=0),
@@ -261,24 +322,38 @@ def notification_send(SITE_IP):
     if errorIndication:
         print('Notification not sent: %s' % errorIndication)
 
-#"This function handles connections to Sites, Routers and JET firewall and management services"
+
+
 def Main():
+    """
+    This function handles connections to Sites, Routers and JET firewall and management services
+    """
     try:
         "connection handles to site is optional in case polling to sites on SNMP/DyCOS server"
         for i in range(1, n+1):
-            S_handle = JetHandler()
-            S_handle.OpenRequestResponseSession(device=globals()['S%s_IP' %i], port=PORT, user=USER, password=PASSWORD,client_id=CLIENT_ID)
-            S_mgmt =S_handle.GetManagementService()
-            globals()['mgmt_S%s' % i] = S_mgmt
+            creds = grpc.ssl_channel_credentials(open('{}.pem'.format(globals()['S%s_IP' %i])).read())
+            channel = grpc.secure_channel(globals()['S%s_IP' %i]+':'+PORT, creds)
+            res = _authenticateChannel(channel, USER, PASSWORD, CLIENT_ID)
+            print "Authentication "+('success' if res else 'failure')+' for '+globals()['S%s_IP' %i]
+            if res is False:
+                return
+            S_mgmt_stub = mgd_service_pb2.ManagementRpcApiStub(channel)
+         
+            globals()['mgmt_S%s' % i] = S_mgmt_stub
 
         "MX router connection and JET service handles"
         for i in range(1, n-1):
-            R_handle = JetHandler()
-            R_handle.OpenRequestResponseSession(device=globals()['R%s_IP' %i], port=PORT, user=USER, password=PASSWORD, client_id=CLIENT_ID)
-            R_fw = R_handle.GetFirewallService()
-            R_mgmt =R_handle.GetManagementService()
-            globals()['mgmt_R%s' % i] = R_mgmt
-            globals()['fw_R%s' % i] = R_fw
+            creds = grpc.ssl_channel_credentials(open('{}.pem'.format(globals()['R%s_IP' %i])).read())
+            channel = grpc.secure_channel(globals()['R%s_IP' %i]+':'+PORT, creds)
+            res = _authenticateChannel(channel, USER, PASSWORD, CLIENT_ID)
+            print "Authentication "+('success' if res else 'failure')+' for '+globals()['R%s_IP' %i]
+            if res is False:
+                return
+            
+            R_fw_stub = firewall_service_pb2.AclServiceStub(channel)
+            R_mgmt_stub = mgd_service_pb2.ManagementRpcApiStub(channel)
+            globals()['mgmt_R%s' % i] = R_mgmt_stub
+            globals()['fw_R%s' % i] = R_fw_stub
 
         Initial_Cos_Configs()
         Get_Site_Latest_Data()
