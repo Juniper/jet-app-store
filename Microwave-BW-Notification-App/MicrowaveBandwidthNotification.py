@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is for Microwave bandwidth notification.
+"""
+
 import glob
 import os
 import re

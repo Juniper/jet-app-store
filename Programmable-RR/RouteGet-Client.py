@@ -18,6 +18,8 @@
 # limitations under the License.
 
 """
+Copyright 2018 Juniper Networks Inc.
+
 Sample Provisional Server code to perform GET request from the JET app.
 This app should send the GET request in the following JSON format:
 

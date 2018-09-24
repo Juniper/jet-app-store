@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is for getting the os version of JET server
+"""
+
 #!/usr/bin/env python
 import argparse
 import grpc

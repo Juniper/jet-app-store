@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+
+"Copyright 2018 Juniper Networks Inc."
 "This Dynamic COS App monitors satellite site's modems in 10 seconds interval and detects the changes in modem codes, error noise ratios"\
 "and symbol rates. Then computes new COS values based on changes in modem values and generate cos configurations and dynamically pushes"\
 "to site's ingess interface of MX based Edge router and also updates dynamic server db with new values"

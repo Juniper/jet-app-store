@@ -1,7 +1,7 @@
-Interduction:
+Introduction:
 --------------
 
-This App will keep track of all the interfaces Carrier transition. if there is change found, it will notify the user on terminal and also sends syslog notification,
+This App will keep track of all the interfaces Carrier transition. if there is a change found, it will notify the user on terminal and also sends syslog notification,
 with the interface name and it's changed new value and old value of carrier transition. 
 
 Note: Before using the app, modify all args values with the accurate one. here used some of the values are more generic/default.
@@ -22,11 +22,11 @@ Configuration on R0:
     and configure the router with below config:
 
     set system scripts language python<br/>
-    set system services extension-service request-response grpc clear-text address <router_management_ip/name> <br/>
-    set system services extension-service notification allow-clients address <router_management_ip/name><br/>
-    set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.1/24<br/>
-    set system syslog file messages any any<br/>
-    set system syslog file messages archive files 1<br/> 
+    set system services extension-service request-response grpc clear-text address <router_management_ip/name> 
+    set system services extension-service notification allow-clients address <router_management_ip/name>
+    set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.1/24
+    set system syslog file messages any any
+    set system syslog file messages archive files 1 
 
 Register your app on-box:
     set system extensions extension-service application file Interface_Flap_Detection.py arguments "-device <router_management_ip/name> -user <username> -password <password> -request_id 100 -grpc_port 32767"

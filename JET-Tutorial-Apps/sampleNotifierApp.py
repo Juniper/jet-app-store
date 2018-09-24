@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+Using this JET APP user can get notification on intrested event topic .
+"""
+
 #!/usr/bin/env python
 
 import argparse

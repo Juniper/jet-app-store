@@ -1,3 +1,8 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This file defines the Route delete API call.
+"""
 
 import time, sys, glob
 import os

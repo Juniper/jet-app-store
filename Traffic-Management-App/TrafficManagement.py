@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is for monitoring the interface traffic rate 
+"""
+
 #!/usr/bin/env python
 import re
 import traceback

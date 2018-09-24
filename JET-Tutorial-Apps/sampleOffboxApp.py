@@ -1,3 +1,10 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP will get the device information
+
+"""
+
 #!/usr/bin/env python
 #
 # Import Python GRPC module

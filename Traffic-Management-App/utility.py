@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This file contains the methods used for syslog subscription.
+"""
+
 import collections
 import logging
 import json

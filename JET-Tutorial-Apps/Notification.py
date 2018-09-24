@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is to subscribe the event notification from JET server.
+"""
+
 #!/usr/bin/env python
 
 import argparse

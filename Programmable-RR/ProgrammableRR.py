@@ -19,6 +19,7 @@
 #
 
 """
+Copyright 2018 Juniper Networks Inc.
 Sample application to handle the requests for setting and getting of BGP routes using
 JET infra on JUNOS devices. This app acts as a server/forwarder for requests from a
 Provisional Server (PS) client.This app can handle at most two concurrent requests so that
