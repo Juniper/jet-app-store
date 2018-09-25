@@ -92,7 +92,7 @@ Linux nms5-vm-linux2 3.11.10-100.fc18.x86_64 #1 SMP Mon Dec 2 20:28:38 UTC 2013 
 ## Route Add operation
 -bash-4.2# python RouteAdd-Client.py
 Preparing Route Information JSON Object
-[{'ipv4address': '80.10.1.15/32', 'action': 'add', 'next_hop': '20.10.1.1', 'community': '100:101'}]
+[{'ipv4address': '192.168.10.1/32', 'action': 'add', 'next_hop': '172.16.1.1', 'community': '100:101'}]
 Route Information Sent on socket, total bytes =  110
 
 [{"returncode": "0"}]
@@ -103,7 +103,7 @@ Closing Socket
 ## Route Modify operation: Modifies the Next-Hop of the already installed route.
 -bash-4.2# python RouteModify-Client.py
 Preparing Route Information JSON Object
-[{'ipv4address': '80.10.1.15/32', 'action': 'modify', 'next_hop': '20.10.2.1', 'community': '100:101'}]
+[{'ipv4address': '192.168.10.1/32', 'action': 'modify', 'next_hop': '172.16.2.1', 'community': '100:101'}]
 Route Information Sent on socket, total bytes =  113
 
 [{"returncode": "0"}]
@@ -115,7 +115,7 @@ Closing Socket
 -bash-4.2# python RouteGet-Client.py
 Creating Route Information JSON Object
 Route Query Sent to the JET app:  [{'action': 'query', 'prefix': 'all'}]
-[{'ipv4address':'80.10.1.15', 'next_hop':'20.10.2.1', 'community':'100:101' }]
+[{'ipv4address':'192.168.10.1', 'next_hop':'172.16.2.1', 'community':'100:101' }]
 Total routes received =  1
 Closing Socket
 -bash-4.2# 
@@ -124,7 +124,7 @@ Closing Socket
 ## Route Delete operation: Deletes the already installed route.
 -bash-4.2# python RouteDelete-Client.py
 Preparing Route Information JSON Object
-[{'ipv4address': '80.10.1.15/32', 'action': 'delete'}]
+[{'ipv4address': '192.168.10.1/32', 'action': 'delete'}]
 Route Information Sent on socket, total bytes =  64
 
 [{"returncode": "0"}]

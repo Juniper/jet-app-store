@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+    #!/usr/bin/env python
 #
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER
 #
@@ -19,6 +19,7 @@
 #
 
 """
+Copyright 2018 Juniper Networks Inc
 Sample application to handle the requests for setting and getting of BGP routes using
 JET infra on JUNOS devices. This app acts as a server/forwarder for requests from a
 Provisional Server (PS) client.This app can handle at most two concurrent requests so that
@@ -28,7 +29,7 @@ get requests. The requests have to be provided by the PS in JSON format.
 
 In case of GET requests, this app will respond to the PS in the following message format:
 |-------------------------------------------------------------------------------|
-| 1byte version| 1 byte response status || 2 byte Payload length | 4 byte unused|
+| 1byte version| 1 byte response status || 4 byte Payload length | 4 byte unused|
 |<----------------------------------------------------------------------------->|
 |                                 Payload Message                               |
 |-------------------------------------------------------------------------------|
@@ -38,24 +39,37 @@ error from the JUNOS router, then in that case, response status will be non-zero
 should be a condition to exit the recv loop in the PS client.
 """
 
+
 import socket, select
 from struct import *
-from jnpr.jet.JetHandler import *
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-from thrift import Thrift
-from thrift.transport import TTransport
-from thrift.protocol import TBinaryProtocol
-
 from Queue import Queue
 from threading import Thread
 import threading
+import json
+import struct
+
+from grpc.beta import implementations
+from grpc.framework.interfaces.face.face import *
+
+import authentication_service_pb2
+import bgp_route_service_pb2
+import prpd_service_pb2
+import prpd_common_pb2
+import jnx_addr_pb2
+from authentication_service_pb2 import *
+from bgp_route_service_pb2 import *
+from prpd_service_pb2 import *
+from prpd_common_pb2 import *
+from jnx_addr_pb2 import *
 
 # Logging Parameters
 DEFAULT_LOG_FILE_NAME = '/tmp/jetapp.log'
 #DEFAULT_LOG_LEVEL = logging.INFO
-DEFAULT_LOG_LEVEL = logging.CRITICAL
+DEFAULT_LOG_LEVEL = logging.DEBUG
+#DEFAULT_LOG_LEVEL = logging.CRITICAL
 
 # Enable Logging to a file
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)s ] %(message)s"
@@ -65,12 +79,13 @@ LOG = logging.getLogger(__name__)
 LOG.addHandler(handler)
 
 # Variables for THRIFT/MQTT connection
-HOST = 'IP of Router'
+HOST = '10.209.15.207'
+GRPC_PORT = 32767
 PORT = 9090
-CLIENT_ID = "100"
-USER = 'lab'
-PASSWORD = 'lab'
-TIMEOUT = 5
+CLIENT_ID = "102"
+USER = 'user_name'
+PASSWORD = 'password'
+TIMEOUT = 250
 JET_APP_VERSION = '1'
 HEADER_LENGTH = calcsize('!ccll')
 
@@ -86,6 +101,7 @@ RECV_BUFFER = 10000
 #CONNECTION_LIST = []
 calling_thread_event = threading.Event()
 
+
 # This function is executed by the dispatch thread
 # It picks all the responses from the dispatch Queue and
 # processes those messages along with the last message
@@ -96,30 +112,38 @@ def sendtoPS():
     global getwaitflag
     while True:
             rspMsg = responseQ.get()
-            responseQ.task_done()
+            #responseQ.task_done()
             # Verify if the entry in the Q is the end of the messages
             # if not then process it
             if (rspMsg == 'END_OF_DATA'):
                 eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
                 try:
+                    LOG.critical("Read EOD info from the Q")
                     clrgetsock.sendall(str(eod_data))
-		    calling_thread_event.set()
+                    calling_thread_event.set()
                 except socket.error, (value, message):
                     getwaitflag = 1
                     LOG.debug('socket.error in sending eod - %s' %str(message))
                     calling_thread_event.set()
             else:
-                str_res = RoutingBgpRouteGetReply()
-                tbuf = TTransport.TMemoryBuffer(rspMsg)
-                tmem_protocol = TBinaryProtocol.TBinaryProtocol(tbuf)
-                str_res.read(tmem_protocol)
+                str_res = rspMsg
                 if (str_res.status == 0):
                     bgpRouteEntry = str_res.bgp_routes
                     json_data = "["
+
                     for route in bgpRouteEntry:
-                        #print route
-                        json_data += "{'ipv4address':'" + str(route.dest_prefix.RoutePrefixAf.inet.AddrFormat.addr_string) + "', 'next_hop':'" + str(
-                            route.protocol_nexthops[0].AddrFormat.addr_string) + "', 'community':'" + route.communities.com_list[0].community_string + "' },"
+                        try:
+                            nh6str = route.protocol_nexthops[0].addr_string
+                        except Exception as e:
+                            nh6str = "None"
+                            LOG.debug('Next-Hop not found for the route')
+                        try:
+                            ro_comm = route.communities.com_list[0].community_string
+                        except Exception as e:
+                            ro_comm = "None"
+                            LOG.debug("Route community not found for the route")
+
+                        json_data += "{'ipv4address':'" + str(route.dest_prefix.inet.addr_string) + "/" + str(route.dest_prefix_len) + "', 'ipv6nh':'" + str(nh6str) + "', 'community':'" + str(ro_comm) + "' },"
 
                     json_data = json_data[:-1]
                     json_data += "]"
@@ -132,17 +156,23 @@ def sendtoPS():
                         LOG.debug('socket.error in sending eod - %s' %str(message))
                         getwaitflag = 1
                         calling_thread_event.set()
+
                 else:
+                    LOG.critical("Route Entry didnt have route information")
+                    LOG.critical('Value of Route Status.. = %s' %str(str_res.status))
+                    LOG.debug('Value of Status..\nreturn = %s ' %str(str_res.status))
                     data = pack('!ccll', JET_APP_VERSION, str(str_res.status), 0, 0)
                     try:
                         clrgetsock.sendall(str(data))
-			calling_thread_event.set()
+                        calling_thread_event.set()
                         getwaitflag = 1
                     except socket.error, (value, message):
                         LOG.debug('socket.error in sending eod - %s' %str(message))
                         getwaitflag = 1
                         calling_thread_event.set()
                 total_sent_msg += 1
+
+
 
 def destRoute(destPrefix, family):
     addrForm = IpAddressAddrFormat(destPrefix)
@@ -199,6 +229,7 @@ def uint32_to_ip(ipn):
     return socket.inet_ntoa(t)
 
 
+
 # Function to handle routeget message
 # This callback simply puts all the received messages in a dispatch Queue
 # This allows it to capture all the notifications successfully
@@ -211,7 +242,7 @@ def handleMessage(message):
     elif eod == 1:
         eod = 0
     else:
-        responseQ.put(str(message))
+        responseQ.put((message))
         time.sleep(2)
 
 
@@ -219,60 +250,58 @@ def AppRouteAdd(clientsocket, routereq):
 
     try:
         # Intialising BGP
-        strBgpReq = RoutingBgpRouteInitializeRequest()
-        result = bgp.BgpRouteInitialize(strBgpReq)
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteAdd..') 
+        strBgpReq = BgpRouteInitializeRequest()
+        result = bgp.BgpRouteInitialize(strBgpReq, TIMEOUT)
         LOG.info('Invoked BgpRouteInitialize API inside AppRouteAdd.. \nreturn = %s ' %str(result.status))
         # List for route entries to be passed to API
         routeindex = 0
         routeList = list()
 
         for jsonentry in routereq:
-
             # Fetching route info from json request
             destroute = jsonentry['ipv4address']
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
-            DEST_PREFIX_LEN = destroutelst[1]
-            DEST6_NEXT_HOP = jsonentry['next_hop']
-            AddCommunity = jsonentry['community']
-            DEST_ROUTE_TABLE = 'inet.0'
-            LOG.info("Route add request received for route:%s" %str(destroute))
+            DEST_PREFIX_LEN = int(destroutelst[1])
+            DEST6_NEXT_HOP = jsonentry['ipv6nh']
+            Community_1 = jsonentry['community']
+            LOG.info("Route add request received for route:%s" % str(destroute))
 
-            # Preparing parameters to call BGP Route Add API
-            nhJnxP = IpAddressAddrFormat(DEST6_NEXT_HOP)
-            nextHop = JnxBaseIpAddress(nhJnxP)
-            routeParams = RoutingBgpRouteEntry()
-            routeParams.dest_prefix = destRoute(DEST_PREFIX_ADD, "inet")
-            routeParams.dest_prefix_len = DEST_PREFIX_LEN
-            routeParams.table = destTableName(DEST_ROUTE_TABLE)
-            routeParams.protocol_nexthops = [nextHop]
-            routeParams.path_cookie = '10'
-            routeParams.protocol = 2
-            #routeParams.route_oper_flag = "4"
-            comm = RoutingCommunity(AddCommunity)
-            bgpAttrCommunity = RoutingCommunityList([comm])
-            routeParams.communities = bgpAttrCommunity
+            # Preparing parameters to call BGP Update API
+            DEST_ROUTE_TABLE = 'inet.0'
+            Protocol = 2
+            destPrefix = RoutePrefix(inet=IpAddress(addr_string=DEST_PREFIX_ADD))
+            destTable = RouteTable(rtt_name=RouteTableName(name=DEST_ROUTE_TABLE))
+            nextHop = IpAddress(addr_string=DEST6_NEXT_HOP)
+            comm1 = Community(community_string=Community_1)
+            cmList = CommunityList(com_list=[comm1])
+            routeParams = BgpRouteEntry(dest_prefix=destPrefix, dest_prefix_len=DEST_PREFIX_LEN, table=destTable,protocol_nexthops=[nextHop], protocol=Protocol, communities=cmList)
             routeindex = routeindex + 1
             routeList.append(routeParams)
 
-       # Calling BGP Route Add API to program routes
-        updReq = RoutingBgpRouteUpdateRequest(routeList)
-        addRes = bgp.BgpRouteAdd(updReq)
-        LOG.info('Invoked Route Add API Status\nreturn = %s' %str(addRes))
+        LOG.info('Total Routes = %d' % routeindex)
+
+        # Calling BGP Route Add API to program routes
+        updReq = BgpRouteUpdateRequest(bgp_routes=routeList)
+        addRes = bgp.BgpRouteAdd(updReq, TIMEOUT)
+        LOG.info('Invoked Route Add API Status\nreturn = %s' % str(addRes))
 
         # API reply captured
         statusval = addRes.status
         route_op_count = addRes.operations_completed
 
         LOG.info("Sending reply to PS")
-        rtaddjsonreply = [{'returncode': str(statusval)}]
+        rtaddjsonreply = [{'returncode': str(statusval), 'route_op_count': str(route_op_count)}]
         try:
             clientsocket.send(json.dumps(rtaddjsonreply))
         except:
             LOG.debug("SocketIO: Write failed")
 
-    except:
-        LOG.info("Sending reply to PS")
+    except Exception as e:
+        LOG.info(str(e))        
+        LOG.debug('Error in Route Add Request')
+        LOG.debug('Sending error-code to PS')
         # Return code where there are issues executing Add APIs
         rtaddjsonreply = [{'returncode': '101'}]
         try:
@@ -283,64 +312,62 @@ def AppRouteAdd(clientsocket, routereq):
     return
 
 
-def AppRouteModify(clrmodsock, routereq):
 
+def AppRouteModify(clrmodsock, routereq):
     try:
         # Intialising BGP
-        strBgpReq = RoutingBgpRouteInitializeRequest()
-        result = bgp.BgpRouteInitialize(strBgpReq)
-        LOG.info('Invoked BgpRouteInitialize API \nreturn = %s' %str(result.status))
-
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteModify..')
+        strBgpReq = BgpRouteInitializeRequest()
+        result = bgp.BgpRouteInitialize(strBgpReq, TIMEOUT)
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteModify.. \nreturn = %s ' % str(result.status))
         # List for route entries to be passed to API
         routeindex = 0
         routeList = list()
 
         for jsonentry in routereq:
-
             # Fetching route info from json request
             destroute = jsonentry['ipv4address']
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
-            DEST_PREFIX_LEN = destroutelst[1]
-            DEST6_NEXT_HOP = jsonentry['next_hop']
-            ModCommunity = jsonentry['community']
-            LOG.info("Route Modify request received for route: %s" %str(destroute))
+            DEST_PREFIX_LEN = int(destroutelst[1])
+            DEST6_NEXT_HOP = jsonentry['ipv6nh']
+            Community_1 = jsonentry['community']
+            LOG.info("Route Modify request received for route: %s" % str(destroute))
 
             # Preparing parameters to call BGP Update API
             DEST_ROUTE_TABLE = 'inet.0'
-            nhJnxP = IpAddressAddrFormat(DEST6_NEXT_HOP)
-            nextHop = JnxBaseIpAddress(nhJnxP)
-            routeParams = RoutingBgpRouteEntry()
-            routeParams.dest_prefix = destRoute(DEST_PREFIX_ADD, "inet")
-            routeParams.dest_prefix_len = DEST_PREFIX_LEN
-            routeParams.table = destTableName(DEST_ROUTE_TABLE)
-            routeParams.protocol_nexthops = [nextHop]
-            routeParams.path_cookie = '10'
-            routeParams.protocol = 2
-            #routeParams.route_oper_flag = "4"
-            comm = RoutingCommunity(ModCommunity)
-            bgpAttrCommunity = RoutingCommunityList([comm])
-            routeParams.communities = bgpAttrCommunity
+            Protocol = 2
+            destPrefix = RoutePrefix(inet=IpAddress(addr_string=DEST_PREFIX_ADD))
+            destTable = RouteTable(rtt_name=RouteTableName(name=DEST_ROUTE_TABLE))
+            nextHop = IpAddress(addr_string=DEST6_NEXT_HOP)
+            comm1 = Community(community_string=Community_1)
+            cmList = CommunityList(com_list=[comm1])
+            routeParams = BgpRouteEntry(dest_prefix=destPrefix, dest_prefix_len=DEST_PREFIX_LEN, table=destTable,protocol_nexthops=[nextHop], protocol=Protocol, communities=cmList)
             routeindex = routeindex + 1
             routeList.append(routeParams)
 
-        LOG.info('Total Routes = %d' %routeindex)
+        LOG.info('Total Routes = %d' % routeindex)
 
-        updReq = RoutingBgpRouteUpdateRequest(routeList)
-        addRes = bgp.BgpRouteUpdate(updReq)
-        LOG.info('Invoked Route Add API Status\nreturn = %s' %str(addRes))
+        # Calling BGP Route Update API to modify routes
+        updReq = BgpRouteUpdateRequest(bgp_routes=routeList)
+        addRes = bgp.BgpRouteUpdate(updReq, TIMEOUT)
+        LOG.info('Invoked Route Modify API Status\nreturn = %s' % str(addRes))
 
         # API reply captured
         statusval = addRes.status
         route_op_count = addRes.operations_completed
 
-        rtmodjsonreply = [{'returncode': str(statusval)}]
+        LOG.info("Sending reply to PS")
+        rtmodjsonreply = [{'returncode': str(statusval), 'route_op_count': str(route_op_count)}]
         try:
             clrmodsock.send(json.dumps(rtmodjsonreply))
         except:
             LOG.debug("SocketIO: Write failed")
 
-    except:
+    except Exception as e:
+        LOG.info(str(e)) 
+        LOG.debug('Error in Route Modify Request')
+        LOG.debug("Sending error-code to PS")
         rtmodjsonreply = [{'returncode': '104'}]
         try:
             clrmodsock.send(json.dumps(rtmodjsonreply))
@@ -350,13 +377,15 @@ def AppRouteModify(clrmodsock, routereq):
     return
 
 
+
 def AppRouteDelete(clrdelsock, routereq):
 
     try:
         # Intialising BGP
-        strBgpReq = RoutingBgpRouteInitializeRequest()
-        result = bgp.BgpRouteInitialize(strBgpReq)
-        LOG.info('Invoked BgpRouteInitialize API return = %s' %str(result))
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteDelete..')
+        strBgpReq = BgpRouteInitializeRequest()
+        result = bgp.BgpRouteInitialize(strBgpReq, TIMEOUT)
+        LOG.info('Invoked BgpRouteInitialize API inside AppRouteDelete.. \nreturn = %s ' %str(result.status))
 
         # List for route entries to be passed to API
         routeindex = 0
@@ -367,44 +396,38 @@ def AppRouteDelete(clrdelsock, routereq):
             destroute = jsonentry['ipv4address']
             destroutelst = destroute.split('/')
             DEST_PREFIX_ADD = destroutelst[0]
-            DEST_PREFIX_LEN = destroutelst[1]
+            DEST_PREFIX_LEN = int(destroutelst[1])
             DEST_ROUTE_TABLE = 'inet.0'
-            LOG.info("Route remove request received for route:%s" %str(destroute))
-
+            Path_Cookie = 11
+            LOG.info("Route remove request received for route:%s" % str(destroute))
             # Preparing parameters to call BGP Route Remove API
-            tableName = RoutingRouteTableName(DEST_ROUTE_TABLE)
-            tableFormat = RouteTableRtTableFormat()
-            tableFormat.rtt_name = tableName
-            routeTable = RoutingRouteTable(tableFormat)
-            addrForm = IpAddressAddrFormat(str(DEST_PREFIX_ADD))
-            jnxP = JnxBaseIpAddress(addrForm)
-            dstP = RoutePrefixRoutePrefixAf()
-            dstP.inet = jnxP
-            destPrefix = RoutingRoutePrefix(dstP)
-            routeParams = RoutingBgpRouteEntry()
-            routeParams.dest_prefix = destPrefix
-            routeParams.dest_prefix_len = DEST_PREFIX_LEN
-            routeParams.table = routeTable
-            routeParams.path_cookie = '10'
+            destPrefix = RoutePrefix(inet=IpAddress(addr_string=DEST_PREFIX_ADD))
+            destTable = RouteTable(rtt_name=RouteTableName(name=DEST_ROUTE_TABLE))
+            routeParams = BgpRouteMatch(dest_prefix=destPrefix, dest_prefix_len=DEST_PREFIX_LEN, table=destTable)
             routeindex = routeindex + 1
             routeList.append(routeParams)
 
-        remReq = RoutingBgpRouteRemoveRequest(0, routeList)
-        remRes = bgp.BgpRouteRemove(remReq)
-        LOG.info('Invoked Route remove API Status return = %s' %str(remRes))
+        LOG.info('Total Routes = %d' % routeindex)
+
+        # Calling BGP Route Remove API to delete routes
+        remReq = BgpRouteRemoveRequest(or_longer=0, bgp_routes=routeList)
+        remRes = bgp.BgpRouteRemove(remReq,TIMEOUT )
+        LOG.info('Invoked Route remove API Status return = %s' % str(remRes))
 
         # API reply captured
         delstatus = remRes.status
         route_op_count = remRes.operations_completed
 
-        rtaddjsonreply = [{'returncode': str(delstatus)}]
+        rtaddjsonreply = [{'returncode': str(delstatus), 'route_op_count': str(route_op_count)}]
         try:
             clrdelsock.send(json.dumps(rtaddjsonreply))
         except:
             LOG.debug("SocketIO: Write failed")
 
     except:
-        # Condition to handle when API execution was not successful
+        LOG.info(str(e))
+        LOG.debug('Error in Route Delete Request')
+        LOG.debug("Sending error-code to PS")
         rtdeljsonreply = [{'returncode': '103'}]
         try:
             clrdelsock.send(json.dumps(rtdeljsonreply))
@@ -413,81 +436,75 @@ def AppRouteDelete(clrdelsock, routereq):
     return
 
 
-def AppRouteGet(clrgetsock, routereq, evHandle):
-
+def AppRouteGet(clrgetsock, routereq):
     # Flag to indicate that the disptach thread execution is complete
     global getwaitflag
     global calling_thread_event
     getwaitflag = 0
     # Intialising BGP
-    strBgpReq = RoutingBgpRouteInitializeRequest()
     try:
-        result = bgp.BgpRouteInitialize(strBgpReq)
-        LOG.info('Invoked BgpRouteInitialize API return = %s' %str(result.status))
+        strBgpReq = BgpRouteInitializeRequest()
+        result = bgp.BgpRouteInitialize(strBgpReq, TIMEOUT)
+        LOG.info('Invoked BgpRouteInitialize API return = %s' % str(result.status))
     except Exception as tx:
         LOG.critical('Received exception: %s' % (tx.message))
-        eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
+        eod_data = pack('!ccll', JET_APP_VERSION, '1', 0, 0)
         clrgetsock.sendall(eod_data)
         os._exit(1)
 
-    # Topic to MQTT to stream the BGP routes
-    topic = "bgp/DoubleUnaryStreamBgpRouteGet"
-
-    stream = evHandle.CreateStreamTopic(topic)
-    evHandle.Subscribe(stream, handleMessage, 2)
-
+    LOG.debug("Received Route Query Request")
     DEST_ROUTE_TABLE = 'inet.0'
-    addrForm = IpAddressAddrFormat('0.0.0.0')
-    jnxP = JnxBaseIpAddress(addrForm)
-    dstP = RoutePrefixRoutePrefixAf()
-    dstP.inet = jnxP
-    destPrefix = RoutingRoutePrefix(dstP)
-    tableName = RoutingRouteTableName(DEST_ROUTE_TABLE)
-    tableFormat = RouteTableRtTableFormat()
-    tableFormat.rtt_name = tableName
-    routeTable = RoutingRouteTable(tableFormat)
-    routeParams = RoutingBgpRouteEntry()
-    routeParams.dest_prefix = destPrefix
-    routeParams.dest_prefix_len = '0'
-    routeParams.table = routeTable
-    bgpRouteReq = RoutingBgpRouteGetRequest()
-    bgpRouteReq.bgp_route = routeParams
-    bgpRouteReq.or_longer = True
-    bgpRouteReq.route_count = '750'
-    bgpRouteReq.active_only = False
+    destprefix = RoutePrefix(inet=IpAddress(addr_string='0.0.0.0'))
+    rttable = RouteTable(rtt_name=RouteTableName(name=DEST_ROUTE_TABLE))
+    routeParams = BgpRouteMatch(dest_prefix=destprefix, dest_prefix_len=0, protocol=2, table=rttable)
+    bgpRouteReq = BgpRouteGetRequest(bgp_route=routeParams, or_longer=True, active_only=False, route_count=750)
+
     try:
-        routeGetReply = bgp.BgpRouteGet(bgpRouteReq, topic)
+        routeGetReply = bgp.BgpRouteGet(bgpRouteReq, timeout=5460)
     except Exception as e:
         LOG.critical('Received exception in calling the JET api: %s' % (tx.message))
-        eod_data = pack('!ccll',JET_APP_VERSION,'1',0,0)
+        eod_data = pack('!ccll', JET_APP_VERSION, '1', 0, 0)
         clrgetsock.sendall(eod_data)
         os._exit(1)
-    responseQ.queue.clear()
+
+    route_counter = 0
+    for i in routeGetReply:
+        route_counter = route_counter + 1
+        LOG.critical(route_counter)
+        responseQ.put(i)
+        #time.sleep(2)
+
+    # After inserting all the routes we need to insert END_OF_DATA for
+    # dispatcher Queue to stop.
+    LOG.critical("Route Streaming Completed")
+    LOG.critical(route_counter)
+    responseQ.put("END_OF_DATA")
     calling_thread_event.wait()
     calling_thread_event.clear()
-    LOG.info('Invoked RouteGet API return = %s' %str(routeGetReply))
     getwaitflag = 0
     if not responseQ.empty():
         responseQ.queue.clear()
     return
 
-
-
 def allRouteApis():
     while True:
         routereq, clientsocket = requestQ.get()
+        LOG.info('Request Finder')
         try:
             if(routereq[0]['action'] == 'add'):
+                LOG.info('Request is for Add')
                 thvalue = AppRouteAdd(clientsocket, routereq)
 
             elif(routereq[0]['action'] == 'query'):
                 global clrgetsock
                 clrgetsock = clientsocket
-                thvalue = AppRouteGet(clrgetsock, routereq, evHandle)
+                LOG.info('Request is for Query')
+                thvalue = AppRouteGet(clrgetsock, routereq)
 
             elif(routereq[0]['action'] == 'delete'):
                 global clrdelsock
                 clrdelsock = clientsocket
+                LOG.info('Request is for Delete')
                 thvalue = AppRouteDelete(clrdelsock, routereq)
 
             elif(routereq[0]['action'] == 'modify'):
@@ -505,6 +522,7 @@ def allRouteApis():
                     LOG.debug("SocketIO: Write failed")
 
         except Exception as e:
+                LOG.info(str(e))
                 LOG.debug("Failed to process the request: %s" %str(e.message))
                 LOG.debug("Sending failure reply to PS")
                 jsonreply = [{'returncode': '100'}]
@@ -516,7 +534,7 @@ def allRouteApis():
 
 
 try:
-    CONNECTION_LIST = list()
+    CONNECTION_LIST = list() 
     for i in range(1):
         t = Thread(target=allRouteApis)
         t.setDaemon(True)
@@ -524,32 +542,15 @@ try:
     dispatch_thread = Thread(target=sendtoPS)
     dispatch_thread.setDaemon(True)
     dispatch_thread.start()
-    # Connection to JSD
-    client = JetHandler()
 
-    # Open a Request Response session
-    client.OpenRequestResponseSession(
-        device=HOST,
-        port=PORT,
-        user=USER,
-        password=PASSWORD,
-        ca_certs=None,
-        client_id=CLIENT_ID)
-    LOG.info("Connected to the JET request response server")
+    channel = implementations.insecure_channel(host=HOST, port=GRPC_PORT)
+    stub = authentication_service_pb2.beta_create_Login_stub(channel)
+    login_response = stub.LoginCheck(authentication_service_pb2.LoginRequest(user_name=USER, password=PASSWORD, client_id=CLIENT_ID), TIMEOUT)
+    LOG.info("Connected to the JET GRPC request response server")
 
-    # Open a notification channel to receive the streaming GET response from JSD
-    evHandle = client.OpenNotificationSession(
-        HOST,
-        1883,
-        None,
-        None,
-        None,
-        DEFAULT_MQTT_TIMEOUT,
-        "",
-        True)
-    LOG.info("Connected to the JET notification server")
-    bgp = client.GetRoutingBgpRoute()
-    prpd = client.GetRoutingBase()
+    bgp = bgp_route_service_pb2.beta_create_BgpRoute_stub(channel)
+    prpd = prpd_service_pb2.beta_create_Base_stub(channel)
+
 
     purgeTime = 30
     # Variables for RouteGet Operation
@@ -568,7 +569,7 @@ try:
     serversocket = socket.socket(
         socket.AF_INET, socket.SOCK_STREAM)
 
-    port = 8888
+    port = 9999
     serversocket.bind(('', port))
 
     LOG.info("Listening to Incoming Connections from the Provisioning Server")
@@ -582,11 +583,11 @@ try:
         read_sockets,write_sockets,error_sockets = select.select(CONNECTION_LIST,[],[])
         for sock in read_sockets:
             if sock == serversocket:
-		if len(CONNECTION_LIST) == 2:
-		    LOG.critical('already processing a client')
-	        else:
+                if len(CONNECTION_LIST) == 2:
+                    LOG.debug('Already processing a client')
+                else:
                     sockfd, addr = serversocket.accept()
-               	    CONNECTION_LIST.append(sockfd)
+                    CONNECTION_LIST.append(sockfd)
                     LOG.info("Client (%s, %s) connected" % addr)
                     LOG.info("Client socket fd = %s" %str(sock))
             else:
@@ -606,6 +607,7 @@ try:
                             LOG.info('Read completed')
                             routereqDict[sock] += psreq
                             routereq = (json.loads(routereqDict[sock]))
+			    LOG.info(str(routereq))
                             requestQ.put((routereq, sock))
                             sockdict.pop(sock)
                             routereqDict.pop(sock)
@@ -630,12 +632,14 @@ try:
     serversocket.close()
     requestQ.join()
 
+
     # Close session
     evHandle.Unsubscribe()
-    LOG.debug("Closing the Client")
+    LOG.critical("Closing the Client")
     client.CloseRequestResponseSession()
     client.CloseNotificationSession()
 
 
 except Thrift.TException as tx:
     LOG.critical('Exception received: %s' %(tx.message))
+
