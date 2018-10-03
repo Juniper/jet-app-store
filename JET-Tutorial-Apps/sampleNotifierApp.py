@@ -116,7 +116,7 @@ def Main():
     mqtt_client = mqtt_connect()
 
     # Create the topic
-    ifatopic = "/junos/events/kernel/interfaces/ifa/add/ge-0/0/2.0/inet/1.1.1.1/32"
+    ifatopic = "/junos/events/kernel/interfaces/ifa/add/ge-0/0/2.0/inet/10.1.1.1/32"
     #alltopics = "/junos/events/#"   # This will let you recieve all the notifications generated on the box
     
     # Subscribe for events
