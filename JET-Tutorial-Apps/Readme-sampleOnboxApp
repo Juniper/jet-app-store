@@ -1,0 +1,82 @@
+This JET app will configure the sample configuration to the juniper router.
+
+Topology:
+---------
+              R1
+           --------
+          |        |
+          |        |
+           --------
+
+Create certificate on off-box (Linux or Ubuntu, etc.) to create secure grpc channel to the router.
+
+Follow below steps and provide the information asked for each below step.
+openssl genrsa -des3 -out RSA2048.key 2048
+openssl req -new -key RSA2048.key  -out RSA2048.csr
+(For the above command provide valid common name (CN) i.e R1 name)
+cp RSA2048.key RSA2048.key.orig
+openssl rsa -in RSA2048.key.orig -out RSA2048.key
+openssl x509 -req -days 365 -in RSA2048.csr -signkey RSA2048.key -out RSA2048.crt
+cat RSA2048.key RSA2048.crt >> RSA2048.pem
+
+Will be using this “RSA2048.pem” certificate file in execution of JET app on-box and off-box as mentioned in below steps.
+
+Configuration on R1 :
+======================
+Copy the certificate file “RSA2048.pem” to R1 /tmp/ path (or any)
+Edit the variable in the app with actual name of the router =>_HOST_OVERRIDE = 'R1_name'
+
+set system scripts language python
+set system services extension-service request-response grpc ssl address 0.0.0.0
+set system services extension-service request-response grpc ssl port 32767
+set system services extension-service request-response grpc ssl local-certificate mycert
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set security certificates local mycert load-key-file  /tmp/RSA2048.pem
+
+
+On-box execution:
+================
+Copy the JET app “sampleOnboxApp.py” to R1 to the path “/var/db/scripts/jet/” and
+
+Register it on-box with the below configuration command:
+set system extensions extension-service application file sampleOnboxApp.py arguments "-d <router R1 mgmt ip address> -u <user_name> -pw <password> -t <timeout_value>"
+
+Edit the certificate name and path if it is different from “/tmp/RSA2048.pem”
+And start execute the app with the below operational command
+“request extension-service start sampleOnboxApp.py”
+
+
+Sample output:
+===============
+user@R1>request extension-service start sampleOnboxApp.py
+[INFO] Connected to gRPC Server:
+True
+[INFO] Connected to JSD and created handle to mgd services
+[INFO] Invoked ExecuteOpCommand API return code =
+0
+[INFO] Return output in CLI format =
+<output>
+Current time: 2018-10-08 06:53:23 PDT
+Time Source:  NTP CLOCK
+System booted: 2018-10-08 03:13:39 PDT (03:39:44 ago)
+Protocols started: 2018-10-08 03:15:59 PDT (03:37:24 ago)
+Last configured: 2018-10-08 05:14:07 PDT (01:39:16 ago) by root
+ 6:53AM  up 3:40, 1 users, load averages: 0.38, 0.32, 0.24
+</output>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
