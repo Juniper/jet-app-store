@@ -1,3 +1,9 @@
+"""
+Copyright 2018 Juniper Networks Inc.
+
+This JET APP is for sample on-box execution demo 
+"""
+
 import argparse
 import grpc
 
