@@ -1,0 +1,74 @@
+This sample JET app will configure the juniper JET router.
+
+Topology:
+---------
+              R1
+           --------
+          |        |
+          |        |
+           --------
+
+Create certificate on off-box(Linux or Ubuntu, etc.) to create secure grpc channel to the router.
+
+Follow below steps and provide the information asked for each below step.
+openssl genrsa -des3 -out RSA2048.key 2048
+openssl req -new -key RSA2048.key  -out RSA2048.csr
+(For the above command provide valid common name (CN) i.e R1 name)
+cp RSA2048.key RSA2048.key.orig
+openssl rsa -in RSA2048.key.orig -out RSA2048.key
+openssl x509 -req -days 365 -in RSA2048.csr -signkey RSA2048.key -out RSA2048.crt
+cat RSA2048.key RSA2048.crt >> RSA2048.pem
+
+Will be using this “RSA2048.pem” certificate file in execution of JET app on-box and off-box as mentioned in below steps.
+
+Configuration on R1 :
+=====================
+Copy the certificate file “RSA2048.pem” to R1 /tmp/ path (or any)
+set system scripts language python
+set system services extension-service request-response grpc ssl address 0.0.0.0
+set system services extension-service request-response grpc ssl port 32767
+set system services extension-service request-response grpc ssl local-certificate mycert
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set security certificates local mycert load-key-file  /tmp/RSA2048.pem
+
+
+
+Off-box(Ubuntu , Linux, etc) execution:
+======================================
+1. Refer JET-off-box-setup repository to setup the off box
+
+2.Copy the JET app “sampleOffboxApp.py” and already created “RSA2048.pem” to “/tmp/” to off-box
+
+3.In the JET app edit the certificate name and path if it is different from “/tmp/RSA2048.pem”
+and edit the variables in the app with actual name of the router =>_HOST_OVERRIDE = 'R1_name'
+
+4.From the app “sampleOffboxApp.py” path start executing it as below
+
+root@ubuntu:/tmp/# python sampleOffboxApp.py "-d <router R1 mgmt. ip address> -u <user_name> -pw <password> -t <timeout_value>
+
+Sample output
+=============
+root@ubuntu:~# python sampleconnectiongrpcssl.py -d <devie ip/name> -u user -pw password -t 10
+[INFO] Connected to gRPC Server:
+True
+[INFO] Connected to JSD and created handle to mgd services << File: RSA2048.pem >>  << File: sampleOffboxApp.py >>  << File: sampleOffboxApp_grpc.py >>
+Configuration Status request_id: 1
+
+On successful execution of JET app, router will be configured with the below configuration:
+user@R1# show system location
+building bldg-name;
+floor 4;
+
+
+
+
+
+
+
+
+
+
+
+
+
+

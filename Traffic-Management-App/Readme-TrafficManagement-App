@@ -1,11 +1,9 @@
-#Introduction [![Store Badge](https://img.shields.io/badge/JET-App-blue.svg)](https://github.com/Juniper/JetApp-Store)
-
+Introduction: 
 JET application "TrafficManagement.py" listens to JET notifications. Whenever JET client receives monitored IFL
 traffic rate rising threshold event, it pushes some of the prefixes traffic via redundant/backup link by programming router's control plane using jet RouteAdd API and delete routes in case of falling thresshold events.
 
-Note: Before using the app, modify all variables like Router name, IFL, etc details.
 
-# Topology
+ Topology
 
 ```
               R1                              R2
@@ -17,19 +15,13 @@ Note: Before using the app, modify all variables like Router name, IFL, etc deta
 	  |______________|              |______________|
   
 ```
-Pre-requisties:<br/>
-1. IFL to be configured between router R1 and router R2<br/>
-2. generate traffic from R2 to R1 ( for test purpose use ping command )<br/>
-3. Install python 2.7.X in off-box(server, desktop, etc) and do `pip install -r requirements.txt` on that machine<br/>
 
-##How to run App from On-box##
 
-1. Copy TrafficManagement.py into R1 /var/db/scripts/jet/
-2. Copy utility.py into R1 /var/db/scripts/jet/
-3.  Configuration on R1<br/>
-    set system scripts language python<br/>
-    set system services extension-service request-response grpc clear-text address <router_management_ip/name> <br/>
-    set system services extension-service notification allow-clients address <router_management_ip/name><br/>
+
+1.  Configuration on R1
+    set system scripts language python
+    set system services extension-service request-response grpc clear-text address <router_management_ip/name>
+    set system services extension-service notification allow-clients address <router_management_ip/name>
     set system services netconf ssh 
     set interfaces ge-0/0/0 unit 0 family inet address 172.16.1.1/24
     set interfaces ge-0/0/1 unit 0 family inet address 172.16.2.1/24
@@ -38,7 +30,7 @@ Pre-requisties:<br/>
     set protocols ospf area 0.0.0.0 interface all
     set protocols ospf area 0.0.0.0 interface fxp0.0 disable
 
-4.  Configuration on R2<br/>
+4.  Configuration on R2
     set system services netconf ssh
     set interfaces ge-0/0/0 unit 0 family inet address 172.16.1.2/24
     set interfaces ge-0/0/1 unit 0 family inet address 172.16.2.2/24
@@ -47,30 +39,38 @@ Pre-requisties:<br/>
     set protocols ospf area 0.0.0.0 interface all
     set protocols ospf area 0.0.0.0 interface fxp0.0 disable
 
-5. Register your app on-box(R1) with the appropriate arguments value:
-     (Below  mentioned args values are specifi to above topology ,connections and configuration specific. Make sure to change the argument values accurate one)
 
-     set system extensions extension-service application file TrafficManagement.py arguments "-R1 <R1 ip > -username <user name> -user_password <password> -r1_interface ge-0/0/0.0 -grpc_port 32767 -NIP 172.16.2.2 -DIP 192.168.20.1/32 -CLIENT_ID 1234 -route_table_name inet.0 -route_prefix 192.168.20.1"
+On-box execution:
+================
+1. Copy TrafficManagement.py and utility.py into R1 /var/db/scripts/jet/
 
-6. Run app from On-box
-    `request extension-service start TrafficManagement.py`
-    Note: to receive rising thershold events, do ping from R2 to R1 IFL IP with max size.
+3. Register your app on-box(R1) using below configuration command with the appropriate arguments value such as device ip,user name ,user_password,etc:
+(Below  mentioned args values are specific to above topology ,connections and configuration specific. Make sure to change the argument values accurate one)
+
+set system extensions extension-service application file TrafficManagement.py arguments "-R1 <R1 ip > -username <user name> -user_password <password> -r1_interface ge-0/0/0.0 -grpc_port 32767 -NIP 172.16.2.2 -DIP 192.168.20.1/32 -CLIENT_ID 1234 -route_table_name inet.0 -route_prefix 192.168.20.1"
+
+3.start executing the app on box using below operational mode command
+'request extension-service start TrafficManagement.py`
+
+Note: to receive rising thershold events, do ping from R2 to R1 IFL IP with max size(1024).
+
     
-##How to run App from off-box##
+off-box execution:
+================
+1. Refer JET-off-box-setup repository to setup the off box
 
-1. Copy App into off-box 
-2. Modify Router R1 name or ip ,destination IP, next-hop IP
-3. Run app from Off-box
-     (Below  mentioned args values are specifi to above topology ,connections and configuration specific. Make sure to change the argument values accurate one)
+2. install mqtt client using the command "pip intsall paho-mqtt "
 
-    python TrafficManagement.py -R1 <R1 ip > -username <user name> -user_password <password> -r1_interface ge-0/0/0.0 -grpc_port 32767 -NIP 172.16.2.2 -DIP 192.168.20.1/32 -CLIENT_ID 1234 -route_table_name inet.0 -route_prefix 192.168.20.1
+3. Copy JET app into off-box 
+
+3. Start executing the JET app using below command from the app path 
+change the args value with accurate one such as device name , user ,password,etc.(Below  mentioned args values are with refrence to above topology.) 
+
+"python TrafficManagement.py -R1 <R1 ip > -username <user name> -user_password <password> -r1_interface ge-0/0/0.0 -grpc_port 32767 -NIP 172.16.2.2 -DIP 192.168.20.1/32 -CLIENT_ID 1234 -route_table_name inet.0 -route_prefix 192.168.20.1"
     
     
-###Sample Output###
-```
-user@R1-0> request extension-service stop TrafficManagement.py
-Extension-service application 'TrafficManagement.py' with pid: 7129 exited with return: -1
-
+Sample output:
+===================
 user@R1-0> request extension-service start TrafficManagement.py
 Extension-service application 'TrafficManagement.py' started with PID: 7179
 Creating GRPC Channel
