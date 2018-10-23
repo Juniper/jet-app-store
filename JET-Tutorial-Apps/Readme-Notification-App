@@ -1,0 +1,67 @@
+This JET application will provide OS version of Juniper router
+
+Topology:
+---------
+              R1
+           --------
+          |        |
+          |        |
+           --------
+
+
+Configuration on R1:
+======================
+set system scripts language python
+set system services extension-service request-response grpc ssl address 0.0.0.0
+set system services extension-service request-response grpc ssl port 32767
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set interfaces lo0 unit 0 family inet address 127.0.0.1/32
+
+
+On-box execution:
+================
+1. Copy the JET app "Notification.py" to R1 to the path “/var/db/scripts/jet/”
+2. Register app on-box with the below configuration command:
+"set system extensions extension-service application file Notification.py arguments "-mqtt_ip <router ip/name>  -mqtt_port 1883 -event_topic /junos/events/# -mqtt_timeout 180""
+
+3. Start executing the app with the below operational command
+“request extension-service start Notification.py”
+
+NOTE: To receive the event, Open a new connection to router R1 and execute any CLI command. For example:
+> show version
+
+
+Off-box (Ubuntu, Linux, etc) execution:
+======================================
+1. Refer JET-off-box-setup repository to setup the off box
+
+2. Install mqtt client using the command "pip install paho-mqtt "
+
+3.Copy the JET app “Notification.py” to off box
+From the app “Notification.py” path start executing it as below
+"python Notification.py -mqtt_ip <router ip/name>  -mqtt_port 1883 -event_topic /junos/events/# -mqtt_timeout 180"
+
+Sample output:
+=================
+user@R1> request extension-service start Notification.py
+Extension-service application 'Notification.py' started with PID: 12419
+Connecting to mqtt broker
+Subscribed to topic
+/junos/events/#
+Event Received : SYSTEM
+Attributes :
+{u'message': u'New connection from 127.0.0.1 on port 1883.'}
+Event Received : SYSTEM
+Attributes :
+{u'message': u'New client connected from 127.0.0.1 as paho/F76D8135F1D4E72A1E (c1, k180).'}
+Event Received : UI_CMDLINE_READ_LINE
+Attributes :
+{u'username': u'user', u'command': u'show version '}
+Event Received : UI_CHILD_START
+Attributes :
+{u'command': u'/usr/libexec/ui/package-info'}
+Event Received : UI_CHILD_STATUS
+Attributes :
+{u'pid': u'12422', u'command': u'/usr/libexec/ui/package-info', u'status-code': u'0'}
+
+
