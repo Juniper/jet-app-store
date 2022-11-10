@@ -8,10 +8,13 @@ This JET APP is for getting the os version of JET server
 import argparse
 import grpc
 import traceback
-from grpc.beta import implementations
-from grpc.framework.interfaces.face.face import *
 from authentication_service_pb2 import *
-import authentication_service_pb2
+
+import authentication_service_pb2 as auth_pb2
+import authentication_service_pb2_grpc as auth_pb2_grpc
+
+#from authentication_service_pb2 import *
+#import authentication_service_pb2
 try:
     from management_service_pb2 import *
 except  ImportError:
@@ -46,17 +49,17 @@ def Main():
         request_id = args.request_id or request_id
 
         channel = grpc.insecure_channel(device+':'+grpc_port)
-        stub = authentication_service_pb2.LoginStub(channel)
+        stub = auth_pb2_grpc.LoginStub(channel)
         try: 
-            login_response = stub.LoginCheck(authentication_service_pb2.LoginRequest(user_name=user,password=password, client_id=request_id), timeout)
+            login_response = stub.LoginCheck(auth_pb2.LoginRequest(user_name=user,password=password, client_id=request_id), timeout)
         except Exception as e:
             print('request id given is in use, using new one')  
-            login_response = stub.LoginCheck(authentication_service_pb2.LoginRequest(user_name=user,password=password, client_id='new'), timeout) 
+            login_response = stub.LoginCheck(auth_pb2.LoginRequest(user_name=user,password=password, client_id='new'), timeout) 
 
         if login_response.result :
-            print "[INFO] Connected to gRPC Server:",+login_response.result
+            print("[INFO] Connected to gRPC Server:",+login_response.result)
         else:
-            print "[ERROR] gRPC Server Connection failed!!!",+login_response.result
+            print("[ERROR] gRPC Server Connection failed!!!",+login_response.result)
 
         mgd = management_service_pb2.ManagementRpcApiStub(channel)
 
@@ -66,11 +69,7 @@ def Main():
         response ='' 
         for i in result:
             response += i.data
-        if i.status == 0:
-            print 'Invoked ExecuteOpCommand API return code = ', i.status
-            print 'Invoked ExecuteOpCommand API return code = ', i.data 
-        else:
-            print 'Something Went Wrong !!! Data not received'
+        print("Response received from device =", response)
     except AbortionError as ex: 
         print ('The application got closed abruptly!!!')
         print ('Got exception: %s' % ex.message)

@@ -29,7 +29,7 @@ def Main():
         args = parser.parse_args()
 
         #Establish grpc channel to jet router
-        creds = grpc.ssl_channel_credentials(open('/tmp/RSA2048.pem').read(),
+        creds = grpc.ssl_channel_credentials((open('/tmp/RSA2048.pem').read()).encode('utf-8'),
                                                 None, None)
         channel = grpc.secure_channel(args.device + ":32767", creds, 
             options=(('grpc.ssl_target_name_override', _HOST_OVERRIDE,),))
@@ -43,15 +43,15 @@ def Main():
 
         #Check if authentication is successful
         if login_response.result == True:
-            print "[INFO] Connected to gRPC Server:"
-            print login_response.result
+            print("[INFO] Connected to gRPC Server:")
+            print(login_response.result)
         else:
-            print "[ERROR] gRPC Server Connection failed!!!"
-            print login_response.result
+            print("[ERROR] gRPC Server Connection failed!!!")
+            print(login_response.result)
 
         #Create stub for management services
         stub = management_service_pb2.ManagementRpcApiStub(channel)
-        print "[INFO] Connected to JSD and created handle to mgd services"
+        print("[INFO] Connected to JSD and created handle to mgd services")
         
         for i in range(1):
             #Provide API request details 
@@ -63,12 +63,12 @@ def Main():
             result = stub.ExecuteOpCommand(op, 100)
             # Check API response like status and output
             for i in result:
-                print "[INFO] Invoked ExecuteOpCommand API return code = "
-                print i.status
-                print "[INFO] Return output in CLI format = "
-                print i.data
+                print("[INFO] Invoked ExecuteOpCommand API return code = ")
+                print(i.status)
+                print("[INFO] Return output in CLI format = ")
+                print(i.data)
     except Exception as ex:
-        print ex
+        print(ex.message)
 
 if __name__ == '__main__':
     Main()
