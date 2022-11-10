@@ -1,6 +1,7 @@
 """
-Copyright 2018 Juniper Networks Inc.
+Copyright 2022 Juniper Networks Inc.
 This JET APP is to subscribe the event notification from JET server.
+Python3 compliant APP
 """
 
 #!/usr/bin/env python

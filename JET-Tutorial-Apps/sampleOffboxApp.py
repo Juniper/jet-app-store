@@ -1,7 +1,9 @@
 """
-Copyright 2018 Juniper Networks Inc.
+Copyright 2022 Juniper Networks Inc.
 
 This JET APP is for sample off-box execution demo
+
+Python3 compliant APP
 """
 
 import argparse
