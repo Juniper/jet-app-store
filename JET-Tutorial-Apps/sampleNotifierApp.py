@@ -1,7 +1,9 @@
 """
-Copyright 2018 Juniper Networks Inc.
+Copyright 2018-2022 Juniper Networks Inc.
 
 This JET APP is to subscribe the event notification from JET server.
+
+Python3 compliant APP
 """
 
 #!/usr/bin/env python
@@ -49,16 +51,22 @@ logger = logging.getLogger(__name__)
 handlers = collections.defaultdict(set)
 
 def handleEvents1(message):
-    print "Event Received : " + message['jet-event']['event-id']
-    print "Attributes : ", message['jet-event']['attributes']
+    print("Event Received : " + message['jet-event']['event-id'])
+    print("Attributes : ", message['jet-event']['attributes'])
     return
 
 def on_message_cb(client, obj, msg):
     global handlers
     payload = msg.payload
     topic = msg.topic
+    my_dict = json.loads(payload)
+    payload = json.dumps(my_dict)
     json_data = None
-    json_data, end = decoder.raw_decode(payload)
+    try:
+        json_data, end = decoder.raw_decode(payload)
+    except e as Ex:
+        print(Ex)
+    print(json_data)
     if json_data is None:
         logger.error('Received event has invalid JSON format')
         logger.error('Received payload: %s' % payload)
@@ -90,7 +98,7 @@ def mqtt_connect():
                         % (traceback.extract_stack()[0][0], traceback.extract_stack()[0][1],  message)
         logger.error('%s' %(err.message))
         raise err
-    except Exception, tx:
+    except Exception as tx:
         tx.message = 'Could not connect to the JET notification server'
         logger.error('%s' %(tx.message))
         raise Exception(tx.message)
@@ -114,6 +122,10 @@ def mqtt_disconnect(mqtt_client):
 
 def Main():
     try:
+        fo = open(DEFAULT_LOG_FILE_NAME, 'w')
+        old_stdout = sys.stdout
+        sys.stdout = fo
+
         global handlers, mqtt_port, mqtt_ip, event_topic, mqtt_timeout
         parser = argparse.ArgumentParser()
         parser.add_argument('-mqtt_ip', help='Input jet server ip or name',type=str)
@@ -127,7 +139,7 @@ def Main():
         mqtt_ip = args.mqtt_ip or mqtt_ip
         mqtt_timeout = args.mqtt_timeout or mqtt_timeout 
 
-        print "Connecting to mqtt broker"
+        print("Connecting to mqtt broker")
         mqtt_client = mqtt_connect()
 
         # Create the topic
@@ -136,16 +148,19 @@ def Main():
 
         # Subscribe for events
         mqtt_subscribe(mqtt_client, event_topic , handleEvents1)
-        print "Subscribed to topic", event_topic
+        print("Subscribed to topic", event_topic)
 
         time.sleep(20)
 
         # Unsubscribe events
         mqtt_unsubscribe(mqtt_client, event_topic)
 
-        print "Disconnecting from the broker"
+        print("Disconnecting from the broker")
         # Close session
         mqtt_disconnect(mqtt_client)
+        fo.close
+        sys.stdout = old_stdout
+        print("Testcase passed")
     except AbortionError as ex:
         print ('The application got closed abruptly!!!')
         print ('Got exception: %s' % ex.message)

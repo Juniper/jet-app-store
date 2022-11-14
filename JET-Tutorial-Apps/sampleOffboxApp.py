@@ -1,13 +1,18 @@
 """
-Copyright 2018 Juniper Networks Inc.
+Copyright 2018-2022 Juniper Networks Inc.
 
 This JET APP is for sample off-box execution demo
+
+Python3 compliant APP
 """
 
 import argparse
 import grpc
 
-import authentication_service_pb2
+from authentication_service_pb2 import *
+
+import authentication_service_pb2 as auth_pb2
+import authentication_service_pb2_grpc as auth_pb2_grpc
 import management_service_pb2
 from management_service_pb2 import *
 
@@ -31,38 +36,34 @@ def Main():
         #Establish grpc channel to jet router
         creds = grpc.ssl_channel_credentials(open('/tmp/RSA2048.pem').read(),
                                                 None, None)
-        channel = grpc.secure_channel(args.device + ":32767", creds, 
-            options=(('grpc.ssl_target_name_override', _HOST_OVERRIDE,),))
-
+        channel = grpc.secure_channel(args.device + ':32767' , creds)
         #create stub for authentication services
-        stub = authentication_service_pb2.LoginStub(channel)
+        stub = auth_pb2_grpc.LoginStub(channel)
         #Authenticate
-        login_request = authentication_service_pb2.LoginRequest(
-            user_name=args.user, password=args.password, client_id="SampleApp")
+        login_request = auth_pb2.LoginRequest(user_name=args.user, password=args.password, client_id="sampleApp")
         login_response = stub.LoginCheck(login_request, args.timeout)
-
         #Check if authentication is successful
         if login_response.result == True:
-            print "[INFO] Connected to gRPC Server:"
-            print login_response.result
+            print ("[INFO] Connected to gRPC Server:")
+            print (login_response.result)
         else:
-            print "[ERROR] gRPC Server Connection failed!!!"
-            print login_response.result
+            print ("[ERROR] gRPC Server Connection failed!!!")
+            print (login_response.result)
 
         #Create stub for management services
         mgd_stub = management_service_pb2.ManagementRpcApiStub(channel)
-        print "[INFO] Connected to JSD and created handle to mgd services"
+        print ("[INFO] Connected to JSD and created handle to mgd services")
         set_config = """<configuration-set>
                      set system location building bldg-name
                      set system location floor 4
                      </configuration-set>"""       
         cfg_req = ExecuteCfgCommandRequest(request_id=1, text_config=set_config, load_type=4,commit=ConfigCommit(commit_type=1))
         CONFIG_RESULT = mgd_stub.ExecuteCfgCommand(cfg_req, timeout=60)
-        print "Configuration Status",CONFIG_RESULT 
+        print ("Configuration Status",CONFIG_RESULT)
      
 
     except Exception as ex:
-        print ex
+        print (ex.message)
 
 if __name__ == '__main__':
     Main()
